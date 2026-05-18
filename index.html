@@ -63,11 +63,11 @@
 
   /* result items */
   .section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin:14px 0 8px}
-  .result-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .result-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px}
   .result-item.unavailable{opacity:0.45}
-  .ri-left{flex:1;min-width:0}
-  .ri-name{font-size:14px;font-weight:500}
-  .ri-meta{font-size:11px;color:var(--text-muted);font-family:var(--mono);margin-top:2px}
+  .ri-left{flex:1;min-width:0;display:block}
+  .ri-name{font-size:14px;font-weight:500;line-height:1.3}
+  .ri-meta{font-size:11px;color:var(--text-muted);font-family:var(--mono);margin-top:1px}
   .ri-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-top:5px;text-transform:uppercase;letter-spacing:0.05em}
   .badge-ok{background:rgba(71,255,178,0.15);color:var(--green)}
   .badge-no{background:rgba(255,77,77,0.15);color:var(--red)}
@@ -144,6 +144,15 @@
   .tooltip-box code{font-family:var(--mono);color:var(--accent);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px}
   .tooltip-box strong{color:var(--text);font-weight:500}
   @media(max-width:480px){.tooltip-box{left:auto;right:0;top:24px}}
+
+  .variant-select{background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;color:var(--text-soft);font-size:12px;padding:4px 6px;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;transition:border-color 0.2s;max-width:150px}
+  .variant-select:focus{border-color:var(--accent);color:var(--text)}
+  .variant-select option{background:#1e1e26}
+
+  .qty-wrap{display:inline-flex;align-items:center;gap:6px;margin-top:6px}
+  .qty-btn{width:24px;height:24px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:all 0.15s;flex-shrink:0}
+  .qty-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .qty-num{font-size:14px;font-weight:600;color:var(--text);min-width:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -212,7 +221,7 @@
           <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📋 Puedes copiar y pegar directo desde PTCGL, Limitless o cualquier app de deck building.</div>
           <div class="field-error" id="err-deck">Ingresa al menos una carta en formato válido.</div>
         </div>
-        <button class="cotizar-btn" onclick="cotizar()">Ver disponibilidad y precios →</button>
+        <button class="cotizar-btn" id="btnCotizar" onclick="cotizar()">Ver disponibilidad y precios →</button>
       </div>
     </div>
 
@@ -405,11 +414,14 @@ let entregaMode = null;
 let direccionMode = 'domicilio';
 
 async function cargarInventario() {
+  const btn = document.getElementById('btnCotizar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cargando inventario...'; }
   try {
     const res = await fetch(SCRIPT_URL + '?carpeta=TCG');
     const json = await res.json();
     if (json.ok && json.data) inventario = json.data;
   } catch(e) {}
+  if (btn) { btn.disabled = false; btn.textContent = 'Ver disponibilidad y precios →'; }
 }
 cargarInventario();
 
@@ -429,61 +441,156 @@ function parseLine(line) {
   return { qty:parseInt(m[1]), nombre:norm(m[2]), set:norm(m[3]), numero:m[4].trim(), numeroNorm:numNorm, display:m[2].trim() };
 }
 
+function normNombre(n) {
+  // Extrae nombre base sin variante: "chikorita [reverse holo]" → "chikorita"
+  return String(n||'').trim().toLowerCase().replace(/\s*\[.*?\]\s*/g,'').trim();
+}
+
 function findCard(item) {
   const numNorm = item.numeroNorm || String(parseInt(item.numero));
+  const nombreBase = normNombre(item.nombre);
   return (
-    // Match exacto
     inventario.find(c=>c.nombre===item.nombre&&c.set===item.set&&c.numero===item.numero) ||
-    // Match normalizando ceros (001 == 1)
     inventario.find(c=>c.nombre===item.nombre&&c.set===item.set&&String(parseInt(c.numero))===numNorm) ||
-    // Match sin set
     inventario.find(c=>c.nombre===item.nombre&&String(parseInt(c.numero))===numNorm) ||
-    // Match solo nombre+set
-    inventario.find(c=>c.nombre===item.nombre&&c.set===item.set)
+    inventario.find(c=>c.nombre===item.nombre&&c.set===item.set) ||
+    // Match por nombre base (sin variante) + set + numero
+    inventario.find(c=>normNombre(c.nombre)===nombreBase&&c.set===item.set&&String(parseInt(c.numero))===numNorm) ||
+    inventario.find(c=>normNombre(c.nombre)===nombreBase&&String(parseInt(c.numero))===numNorm)
   );
+}
+
+function findVariantes(item) {
+  const numNorm = item.numeroNorm || String(parseInt(item.numero));
+  const nombreBase = normNombre(item.nombre);
+  const setItem = item.set; // ej: "dri"
+  return inventario.filter(c => {
+    const cBase = normNombre(c.nombre);
+    const cNum  = String(parseInt(c.numero));
+    const cSet  = String(c.set || '').trim().toLowerCase();
+    // Match por nombre base + numero (set opcional como fallback)
+    const matchSinSet = cBase === nombreBase && cNum === numNorm && c.stock > 0;
+    return matchSinSet;
+  });
+}
+
+function getVariantLabel(nombre) {
+  const m = String(nombre).match(/\[(.+?)\]/);
+  return m ? m[1] : 'Normal';
 }
 
 function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
 function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
-function cotizar() {
+function buildControles(variantes, idx, disp, stockMax, found) {
+  let html = '';
+  // Línea 1: "Elige tu rareza" (solo si hay variantes)
+  if (variantes.length > 1) {
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:5px;margin-bottom:4px;display:block">Elige tu rareza</div>';
+    // Línea 2: selector + cantidad
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    html += '<select class="variant-select" onchange="cambiarVariante(' + idx + ',this.value)">';
+    variantes.forEach((v, vi) => {
+      html += '<option value="' + vi + '">' + getVariantLabel(v.nombre) + ' — ' + clp(v.precio) + '</option>';
+    });
+    html += '</select>';
+  } else {
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px">';
+    const label = getVariantLabel(found.nombre);
+    if (label !== 'Normal') {
+      html += '<span style="font-size:11px;color:var(--text-muted)">' + label + '</span>';
+    }
+  }
+  html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
+  html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
+  html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
+  // sin label de stock visible
+  html += '</div>';
+  const stockDisp = found.stock;
+  const maxPermitido = Math.min(12, stockDisp);
+  const msgStock = stockDisp >= 12
+    ? 'Máx. 12 copias por pedido'
+    : 'Solo ' + stockDisp + ' disponibles';
+  html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
+  return html;
+}
+
+async function cotizar() {
   const raw = document.getElementById('deckInput').value.trim();
   const errDeck = document.getElementById('err-deck');
   if (!raw) { errDeck.classList.add('show'); return; }
   errDeck.classList.remove('show');
   const items = raw.split('\n').map(parseLine).filter(Boolean);
   if (!items.length) { errDeck.classList.add('show'); return; }
+  // Garantizar que el inventario esté cargado
+  if (inventario.length === 0) {
+    await cargarInventario();
+  }
+  if (inventario.length === 0) {
+    document.getElementById('cotizacionResult').innerHTML = '<p style="color:var(--red);font-size:13px">No se pudo cargar el inventario. Intenta de nuevo.</p>';
+    document.getElementById('stepCotizacion').style.display = 'block';
+    return;
+  }
 
   const ok=[],parcial=[],nope=[];
+  // itemsCotizados guardará {item, found, disp, variantIdx} con índice de variante seleccionada
+  const cotizadosTemp = [];
+
   for (const item of items) {
-    const found = findCard(item);
-    if (!found||found.stock===0) { nope.push({...item,sinStock:found&&found.stock===0}); continue; }
-    if (found.stock<item.qty) { parcial.push({...item,found,disp:found.stock}); }
-    else { ok.push({...item,found}); }
+    const variantes = findVariantes(item);
+    if (!variantes.length) {
+      const anyFound = findCard(item);
+      nope.push({...item, sinStock: !!anyFound}); continue;
+    }
+    const found = variantes[0]; // variante por defecto: la primera disponible
+    const disp = Math.min(12, found.stock >= item.qty ? item.qty : found.stock);
+    const estado = found.stock >= item.qty ? 'ok' : 'parcial';
+    cotizadosTemp.push({item, found, disp, variantes, estado, idxSel:0});
+    if (estado==='ok') ok.push({...item,found,disp});
+    else parcial.push({...item,found,disp});
   }
-  itemsCotizados = [...ok,...parcial];
+  itemsCotizados = cotizadosTemp;
 
   let html='';
-  if (ok.length) {
+  if (ok.length||parcial.length) {
     html+='<div class="section-label">Disponibles</div>';
-    for(const d of ok) html+=`<div class="result-item"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-ok">En stock</span></div><div class="ri-right"><div class="ri-unit">${clp(d.found.precio)} c/u</div><div class="ri-sub">${clp(d.qty*d.found.precio)}</div></div></div>`;
   }
-  if (parcial.length) {
-    html+='<div class="section-label">Stock parcial</div>';
-    for(const d of parcial) html+=`<div class="result-item"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · Pedidas x${d.qty}</div><span class="ri-badge badge-par">Solo ${d.disp} disponibles</span></div><div class="ri-right"><div class="ri-unit">${clp(d.found.precio)} c/u</div><div class="ri-sub">${clp(d.disp*d.found.precio)}</div></div></div>`;
-  }
+
+  cotizadosTemp.forEach((entry, idx) => {
+    const {item, found, disp, variantes, estado} = entry;
+    const subTotal = disp * found.precio;
+    const badgeHtml = estado==='ok'
+      ? `<span class="ri-badge badge-ok">En stock</span>`
+      : `<span class="ri-badge badge-par">Solo ${disp}/${item.qty} disponibles</span>`;
+
+    // selectorHtml integrado en el bloque de controles
+
+    const stockMax = found.stock;
+    html+=`<div class="result-item" id="ri-${idx}">
+      <div class="ri-left">
+        <div class="ri-name">${cap(item.display)}</div>
+        <div class="ri-meta">${item.set.toUpperCase()} ${item.numero} · <span id="ri-rareza-${idx}">${getVariantLabel(found.nombre)}</span></div>
+        <div style="margin-top:6px">${badgeHtml}</div>
+        ${buildControles(variantes, idx, disp, stockMax, found)}
+      </div>
+      <div class="ri-right" id="ri-price-${idx}">
+        <div class="ri-unit">${clp(found.precio)} c/u</div>
+        <div class="ri-sub">${clp(subTotal)}</div>
+      </div>
+    </div>`;
+  });
+
   if (nope.length) {
     html+='<div class="section-label">No disponibles</div>';
     for(const d of nope) html+=`<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">${d.sinStock?'Sin stock':'No en inventario'}</span></div></div>`;
   }
 
-  const totalOk=ok.reduce((s,d)=>s+d.qty*d.found.precio,0);
-  const totalP=parcial.reduce((s,d)=>s+d.disp*d.found.precio,0);
-  const total=totalOk+totalP;
-  const cartasSi=ok.reduce((s,d)=>s+d.qty,0)+parcial.reduce((s,d)=>s+d.disp,0);
-  const cartasNo=nope.reduce((s,d)=>s+d.qty,0);
+  const totalDisp = cotizadosTemp.reduce((s,e)=>s+e.disp*e.found.precio,0);
+  const cartasSi = cotizadosTemp.reduce((s,e)=>s+e.disp,0);
+  const cartasNo = nope.reduce((s,d)=>s+d.qty,0);
+  const total = totalDisp;
 
-  html+=`<div class="summary-card"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo>0?`<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>`:''}<div class="summary-line total-line"><span>Total</span><strong>${clp(total)}</strong></div></div>`;
+  html+=`<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo>0?`<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>`:''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(total)}</strong></div></div>`;
 
   if (itemsCotizados.length>0)
     html+=`<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
@@ -491,6 +598,64 @@ function cotizar() {
   document.getElementById('cotizacionResult').innerHTML=html;
   document.getElementById('stepCotizacion').style.display='block';
   document.getElementById('stepCotizacion').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function cambiarQty(idx, delta) {
+  const entry = itemsCotizados[idx];
+  const max = Math.min(12, entry.found.stock);
+  const nueva = Math.min(max, Math.max(1, entry.disp + delta));
+  entry.disp = nueva;
+  const sub = nueva * entry.found.precio;
+  const qtyEl = document.getElementById('ri-qty-' + idx);
+  qtyEl.textContent = nueva;
+  qtyEl.style.color = nueva >= Math.min(12, itemsCotizados[idx].found.stock) ? 'var(--red)' : 'var(--text)';
+  document.getElementById('ri-price-' + idx).innerHTML =
+    `<div class="ri-unit">${clp(entry.found.precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+  const nuevoTotal = itemsCotizados.reduce((s,e)=>s+e.disp*e.found.precio,0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarResumen();
+}
+
+function cambiarVariante(idx, vi) {
+  const entry = itemsCotizados[idx];
+  const viNum = parseInt(vi);
+  entry.idxSel = viNum;
+  entry.found  = entry.variantes[viNum];
+  // Recalcular disp según nuevo stock — respetar qty actual si cabe
+  const maxNuevo = Math.min(12, entry.found.stock);
+  entry.disp = Math.min(entry.disp, maxNuevo);
+  if (entry.disp < 1) entry.disp = 1;
+  const sub = entry.disp * entry.found.precio;
+  // Actualizar precio en UI
+  document.getElementById('ri-price-'+idx).innerHTML =
+    `<div class="ri-unit">${clp(entry.found.precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+  // Actualizar cantidad mostrada y max disponible
+  const qtyEl = document.getElementById('ri-qty-'+idx);
+  if (qtyEl) qtyEl.textContent = entry.disp;
+  // Actualizar el texto "de X disponibles" — está en el span siguiente al qty-num
+  const qtyWrap = qtyEl && qtyEl.closest('.qty-wrap');
+  if (qtyWrap) {
+    const spans = qtyWrap.querySelectorAll('span');
+    if (spans.length >= 2) spans[spans.length-1].textContent = `de ${maxNuevo} disponibles`;
+  }
+  // Actualizar rareza visible en meta
+  const rarezaEl = document.getElementById('ri-rareza-' + idx);
+  if (rarezaEl) rarezaEl.textContent = getVariantLabel(entry.found.nombre);
+  // Actualizar mensaje de stock dinámico
+  const controles = document.getElementById('ri-' + idx);
+  if (controles) {
+    const msgEl = controles.querySelector('.stock-msg');
+    if (msgEl) {
+      const sd = entry.found.stock;
+      msgEl.textContent = sd >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + sd + ' disponibles';
+    }
+  }
+  // Recalcular total
+  const nuevoTotal = itemsCotizados.reduce((s,e)=>s+e.disp*e.found.precio,0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarResumen();
 }
 
 function mostrarFormPedido() {
@@ -526,12 +691,15 @@ function actualizarResumen() {
   if(usuario) html+=`<div class="summary-line"><span>Instagram</span><strong>@${usuario.replace('@','')}</strong></div>`;
   if(entregaMode) html+=`<div class="summary-line"><span>Entrega</span><strong>${entregaMode==='retiro'?'Retiro en persona':'Envío a todo Chile'}</strong></div>`;
   let total=0;
-  for(const d of itemsCotizados){
-    const qty=d.disp||d.qty; const sub=qty*d.found.precio; total+=sub;
-    html+=`<div class="summary-line"><span>${cap(d.display)} x${qty}</span><strong>${clp(sub)}</strong></div>`;
+  for(const e of itemsCotizados){
+    const qty=e.disp; const sub=qty*e.found.precio; total+=sub;
+    const label=getVariantLabel(e.found.nombre);
+    const varLabel=label!=='Normal'?` (${label})`:'';
+    html+=`<div class="summary-line"><span>${cap(e.item.display)}${varLabel} x${qty}</span><strong>${clp(sub)}</strong></div>`;
   }
   html+=`<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
-  document.getElementById('resumenFinal').innerHTML=html;
+  const el=document.getElementById('resumenFinal');
+  if(el) el.innerHTML=html;
 }
 
 function formatRut(el) {
@@ -588,10 +756,11 @@ async function submitPedido() {
     }
   }
 
-  const orderItems=itemsCotizados.map(d=>({
-    nombre:cap(d.display), set:d.set.toUpperCase(), numero:d.numero,
-    cantidad:d.disp||d.qty, precio_clp:d.found.precio,
-    subtotal:(d.disp||d.qty)*d.found.precio
+  const orderItems=itemsCotizados.map(e=>({
+    nombre:cap(e.item.display) + ' - ' + getVariantLabel(e.found.nombre),
+    set:e.item.set.toUpperCase(), numero:e.item.numero,
+    cantidad:e.disp, precio_clp:e.found.precio,
+    subtotal:e.disp*e.found.precio
   }));
 
   const orderData={
