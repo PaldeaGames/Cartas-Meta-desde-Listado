@@ -412,6 +412,7 @@ let inventario = [];
 let itemsCotizados = [];
 let entregaMode = null;
 let direccionMode = 'domicilio';
+let idiomaDefault = 'ENG'; // siempre inglés por defecto
 
 async function cargarInventario() {
   const btn = document.getElementById('btnCotizar');
@@ -429,88 +430,91 @@ function norm(v) { return String(v||'').trim().toLowerCase(); }
 
 function parseLine(line) {
   let l = line.trim();
-  // Formato PTCGL: "* 4 Nombre SET 001" → quitar asterisco
   if (l.startsWith('*')) l = l.replace(/^\*\s*/, '');
   if (!l||l.startsWith('//')||l.startsWith('#')) return null;
   const low = l.toLowerCase();
   if (low.startsWith('pokemon')||low.startsWith('trainer')||low.startsWith('energy')||low.startsWith('total')) return null;
   const m = l.match(/^(\d+)\s+(.+?)\s+([A-Za-z0-9\-]{2,8})\s+(\d{1,4}[a-z]?)$/i);
   if (!m) return null;
-  // Normalizar número: quitar ceros iniciales para comparación ("001" → "1")
   const numNorm = String(parseInt(m[4]));
   return { qty:parseInt(m[1]), nombre:norm(m[2]), set:norm(m[3]), numero:m[4].trim(), numeroNorm:numNorm, display:m[2].trim() };
 }
 
-function normNombre(n) {
-  // Extrae nombre base sin variante: "chikorita [reverse holo]" → "chikorita"
-  return String(n||'').trim().toLowerCase().replace(/\s*\[.*?\]\s*/g,'').trim();
-}
-
-function findCard(item) {
+// Busca todas las entradas del inventario para una carta (nombre+set+numero)
+// El inventario nuevo tiene una entrada por carta×variante con stk_esp y stk_eng
+function findGrupo(item) {
   const numNorm = item.numeroNorm || String(parseInt(item.numero));
-  const nombreBase = normNombre(item.nombre);
-  return (
-    inventario.find(c=>c.nombre===item.nombre&&c.set===item.set&&c.numero===item.numero) ||
-    inventario.find(c=>c.nombre===item.nombre&&c.set===item.set&&String(parseInt(c.numero))===numNorm) ||
-    inventario.find(c=>c.nombre===item.nombre&&String(parseInt(c.numero))===numNorm) ||
-    inventario.find(c=>c.nombre===item.nombre&&c.set===item.set) ||
-    // Match por nombre base (sin variante) + set + numero
-    inventario.find(c=>normNombre(c.nombre)===nombreBase&&c.set===item.set&&String(parseInt(c.numero))===numNorm) ||
-    inventario.find(c=>normNombre(c.nombre)===nombreBase&&String(parseInt(c.numero))===numNorm)
-  );
-}
-
-function findVariantes(item) {
-  const numNorm = item.numeroNorm || String(parseInt(item.numero));
-  const nombreBase = normNombre(item.nombre);
-  const setItem = item.set; // ej: "dri"
+  const nombreBase = norm(item.nombre);
+  const setItem = item.set;
   return inventario.filter(c => {
-    const cBase = normNombre(c.nombre);
-    const cNum  = String(parseInt(c.numero));
-    const cSet  = String(c.set || '').trim().toLowerCase();
-    // Match por nombre base + numero (set opcional como fallback)
-    const matchSinSet = cBase === nombreBase && cNum === numNorm && c.stock > 0;
-    return matchSinSet;
+    const cNombre = norm(c.nombre);
+    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, "");
+    const cSet    = norm(c.set || '');
+    const stockDisp = idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0);
+    return cNombre === nombreBase &&
+           (cSet === setItem || cNum === numNorm) &&
+           cNum === numNorm &&
+           stockDisp > 0;
   });
 }
 
-function getVariantLabel(nombre) {
-  const m = String(nombre).match(/\[(.+?)\]/);
-  return m ? m[1] : 'Normal';
+// Precio y stock según idioma seleccionado
+function getStock(c) { return idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
+function getPrecio(c) { return idiomaDefault === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
+
+// Verifica si una carta existe en inventario aunque sin stock en idioma actual
+function findAny(item) {
+  const numNorm = item.numeroNorm || String(parseInt(item.numero));
+  const nombreBase = norm(item.nombre);
+  return inventario.find(c => norm(c.nombre) === nombreBase && String(parseInt(c.numero)) === numNorm);
 }
 
 function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
 function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
-function buildControles(variantes, idx, disp, stockMax, found) {
+function buildControles(grupo, idx, disp, found) {
   let html = '';
-  // Línea 1: "Elige tu rareza" (solo si hay variantes)
-  if (variantes.length > 1) {
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:5px;margin-bottom:4px;display:block">Elige tu rareza</div>';
-    // Línea 2: selector + cantidad
+  const stockActual = getStock(found);
+  const maxPermitido = Math.min(12, stockActual);
+
+  // Selector de idioma (botones ENG / ESP)
+  const tieneEsp = grupo.some(c => c.variante === found.variante && (c.stk_esp || 0) > 0);
+  const tieneEng = grupo.some(c => c.variante === found.variante && (c.stk_eng || 0) > 0);
+  if (tieneEsp && tieneEng) {
+    html += '<div style="display:flex;gap:6px;margin-top:6px;margin-bottom:4px">';
+    html += '<button onclick="cambiarIdioma(' + idx + ',\'ENG\')" id="btn-eng-' + idx + '" style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid ' + (idiomaDefault==='ENG'?'var(--accent)':'var(--border)') + ';background:' + (idiomaDefault==='ENG'?'var(--accent-dim)':'transparent') + ';color:' + (idiomaDefault==='ENG'?'var(--accent)':'var(--text-muted)') + ';cursor:pointer">ENG</button>';
+    html += '<button onclick="cambiarIdioma(' + idx + ',\'ESP\')" id="btn-esp-' + idx + '" style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid ' + (idiomaDefault==='ESP'?'var(--accent)':'var(--border)') + ';background:' + (idiomaDefault==='ESP'?'var(--accent-dim)':'transparent') + ';color:' + (idiomaDefault==='ESP'?'var(--accent)':'var(--text-muted)') + ';cursor:pointer">ESP</button>';
+    html += '</div>';
+  }
+
+  // Selector de rareza
+  const variantesUnicas = [...new Set(grupo.map(c => c.variante))];
+  if (variantesUnicas.length > 1) {
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-bottom:3px">Elige tu rareza</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-    html += '<select class="variant-select" onchange="cambiarVariante(' + idx + ',this.value)">';
-    variantes.forEach((v, vi) => {
-      html += '<option value="' + vi + '">' + getVariantLabel(v.nombre) + ' — ' + clp(v.precio) + '</option>';
+    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)">';
+    variantesUnicas.forEach(v => {
+      const stockV = grupo.filter(c => c.variante === v).reduce((s,c) => s + getStock(c), 0);
+      const precioV = grupo.find(c => c.variante === v);
+      const precio = precioV ? getPrecio(precioV) : 0;
+      html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
     });
     html += '</select>';
   } else {
     html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px">';
-    const label = getVariantLabel(found.nombre);
-    if (label !== 'Normal') {
-      html += '<span style="font-size:11px;color:var(--text-muted)">' + label + '</span>';
+    if (found.variante !== 'Normal') {
+      html += '<span style="font-size:11px;color:var(--text-muted)">' + found.variante + '</span>';
     }
   }
+
+  // Botones cantidad
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
-  // sin label de stock visible
   html += '</div>';
-  const stockDisp = found.stock;
-  const maxPermitido = Math.min(12, stockDisp);
-  const msgStock = stockDisp >= 12
-    ? 'Máx. 12 copias por pedido'
-    : 'Solo ' + stockDisp + ' disponibles';
+
+  // Mensaje stock
+  const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
   html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
   return html;
 }
@@ -532,127 +536,135 @@ async function cotizar() {
     return;
   }
 
-  const ok=[],parcial=[],nope=[];
-  // itemsCotizados guardará {item, found, disp, variantIdx} con índice de variante seleccionada
+  const nope = [];
   const cotizadosTemp = [];
 
   for (const item of items) {
-    const variantes = findVariantes(item);
-    if (!variantes.length) {
-      const anyFound = findCard(item);
+    // Buscar todas las variantes disponibles en el idioma actual
+    const grupo = findGrupo(item);
+    if (!grupo.length) {
+      const anyFound = findAny(item);
       nope.push({...item, sinStock: !!anyFound}); continue;
     }
-    const found = variantes[0]; // variante por defecto: la primera disponible
-    const disp = Math.min(12, found.stock >= item.qty ? item.qty : found.stock);
-    const estado = found.stock >= item.qty ? 'ok' : 'parcial';
-    cotizadosTemp.push({item, found, disp, variantes, estado, idxSel:0});
-    if (estado==='ok') ok.push({...item,found,disp});
-    else parcial.push({...item,found,disp});
+    // Por defecto: Normal primero, si no la primera disponible
+    const found = grupo.find(c => c.variante === 'Normal') || grupo[0];
+    const stockFound = getStock(found);
+    const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
+    const estado = stockFound >= item.qty ? 'ok' : 'parcial';
+    cotizadosTemp.push({item, found, grupo, disp, estado});
   }
   itemsCotizados = cotizadosTemp;
 
-  let html='';
-  if (ok.length||parcial.length) {
-    html+='<div class="section-label">Disponibles</div>';
-  }
+  let html = '';
+  if (cotizadosTemp.length) html += '<div class="section-label">Disponibles</div>';
 
   cotizadosTemp.forEach((entry, idx) => {
-    const {item, found, disp, variantes, estado} = entry;
-    const subTotal = disp * found.precio;
-    const badgeHtml = estado==='ok'
+    const {item, found, grupo, disp, estado} = entry;
+    const precio = getPrecio(found);
+    const subTotal = disp * precio;
+    const badgeHtml = estado === 'ok'
       ? `<span class="ri-badge badge-ok">En stock</span>`
-      : `<span class="ri-badge badge-par">Solo ${disp}/${item.qty} disponibles</span>`;
+      : `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
 
-    // selectorHtml integrado en el bloque de controles
-
-    const stockMax = found.stock;
-    html+=`<div class="result-item" id="ri-${idx}">
+    html += `<div class="result-item" id="ri-${idx}">
       <div class="ri-left">
         <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${item.set.toUpperCase()} ${item.numero} · <span id="ri-rareza-${idx}">${getVariantLabel(found.nombre)}</span></div>
+        <div class="ri-meta">${item.set.toUpperCase()} ${item.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
+        <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
         <div style="margin-top:6px">${badgeHtml}</div>
-        ${buildControles(variantes, idx, disp, stockMax, found)}
+        ${buildControles(grupo, idx, disp, found)}
       </div>
       <div class="ri-right" id="ri-price-${idx}">
-        <div class="ri-unit">${clp(found.precio)} c/u</div>
+        <div class="ri-unit">${clp(precio)} c/u</div>
         <div class="ri-sub">${clp(subTotal)}</div>
       </div>
     </div>`;
   });
 
   if (nope.length) {
-    html+='<div class="section-label">No disponibles</div>';
-    for(const d of nope) html+=`<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">${d.sinStock?'Sin stock':'No en inventario'}</span></div></div>`;
+    html += '<div class="section-label">No disponibles</div>';
+    for (const d of nope) html += `<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">${d.sinStock ? 'Sin stock en este idioma' : 'No en inventario'}</span></div></div>`;
   }
 
-  const totalDisp = cotizadosTemp.reduce((s,e)=>s+e.disp*e.found.precio,0);
-  const cartasSi = cotizadosTemp.reduce((s,e)=>s+e.disp,0);
-  const cartasNo = nope.reduce((s,d)=>s+d.qty,0);
-  const total = totalDisp;
+  const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const cartasSi  = cotizadosTemp.reduce((s,e) => s + e.disp, 0);
+  const cartasNo  = nope.reduce((s,d) => s + d.qty, 0);
 
-  html+=`<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo>0?`<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>`:''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(total)}</strong></div></div>`;
+  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
 
-  if (itemsCotizados.length>0)
-    html+=`<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
+  if (itemsCotizados.length > 0)
+    html += `<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
 
-  document.getElementById('cotizacionResult').innerHTML=html;
-  document.getElementById('stepCotizacion').style.display='block';
+  document.getElementById('cotizacionResult').innerHTML = html;
+  document.getElementById('stepCotizacion').style.display = 'block';
   document.getElementById('stepCotizacion').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function cambiarQty(idx, delta) {
   const entry = itemsCotizados[idx];
-  const max = Math.min(12, entry.found.stock);
+  const max   = Math.min(12, getStock(entry.found));
   const nueva = Math.min(max, Math.max(1, entry.disp + delta));
-  entry.disp = nueva;
-  const sub = nueva * entry.found.precio;
-  const qtyEl = document.getElementById('ri-qty-' + idx);
+  entry.disp  = nueva;
+  const precio = getPrecio(entry.found);
+  const sub    = nueva * precio;
+  const qtyEl  = document.getElementById('ri-qty-' + idx);
   qtyEl.textContent = nueva;
-  qtyEl.style.color = nueva >= Math.min(12, itemsCotizados[idx].found.stock) ? 'var(--red)' : 'var(--text)';
+  qtyEl.style.color = nueva >= max ? 'var(--red)' : 'var(--text)';
   document.getElementById('ri-price-' + idx).innerHTML =
-    `<div class="ri-unit">${clp(entry.found.precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
-  const nuevoTotal = itemsCotizados.reduce((s,e)=>s+e.disp*e.found.precio,0);
+    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
 }
 
-function cambiarVariante(idx, vi) {
-  const entry = itemsCotizados[idx];
-  const viNum = parseInt(vi);
-  entry.idxSel = viNum;
-  entry.found  = entry.variantes[viNum];
-  // Recalcular disp según nuevo stock — respetar qty actual si cabe
-  const maxNuevo = Math.min(12, entry.found.stock);
-  entry.disp = Math.min(entry.disp, maxNuevo);
+function cambiarVariante(idx, varNombre) {
+  const entry   = itemsCotizados[idx];
+  const nuevaFound = entry.grupo.find(c => c.variante === varNombre && getStock(c) > 0);
+  if (!nuevaFound) return;
+  entry.found = nuevaFound;
+  const max   = Math.min(12, getStock(nuevaFound));
+  entry.disp  = Math.min(entry.disp, max);
   if (entry.disp < 1) entry.disp = 1;
-  const sub = entry.disp * entry.found.precio;
-  // Actualizar precio en UI
-  document.getElementById('ri-price-'+idx).innerHTML =
-    `<div class="ri-unit">${clp(entry.found.precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
-  // Actualizar cantidad mostrada y max disponible
-  const qtyEl = document.getElementById('ri-qty-'+idx);
-  if (qtyEl) qtyEl.textContent = entry.disp;
-  // Actualizar el texto "de X disponibles" — está en el span siguiente al qty-num
-  const qtyWrap = qtyEl && qtyEl.closest('.qty-wrap');
-  if (qtyWrap) {
-    const spans = qtyWrap.querySelectorAll('span');
-    if (spans.length >= 2) spans[spans.length-1].textContent = `de ${maxNuevo} disponibles`;
-  }
-  // Actualizar rareza visible en meta
+  const precio = getPrecio(nuevaFound);
+  const sub    = entry.disp * precio;
+  document.getElementById('ri-price-' + idx).innerHTML =
+    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+  const qtyEl = document.getElementById('ri-qty-' + idx);
+  if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
   const rarezaEl = document.getElementById('ri-rareza-' + idx);
-  if (rarezaEl) rarezaEl.textContent = getVariantLabel(entry.found.nombre);
-  // Actualizar mensaje de stock dinámico
-  const controles = document.getElementById('ri-' + idx);
-  if (controles) {
-    const msgEl = controles.querySelector('.stock-msg');
-    if (msgEl) {
-      const sd = entry.found.stock;
-      msgEl.textContent = sd >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + sd + ' disponibles';
-    }
-  }
-  // Recalcular total
-  const nuevoTotal = itemsCotizados.reduce((s,e)=>s+e.disp*e.found.precio,0);
+  if (rarezaEl) rarezaEl.textContent = nuevaFound.variante;
+  const msgEl = document.getElementById('ri-' + idx)?.querySelector('.stock-msg');
+  if (msgEl) { const s = getStock(nuevaFound); msgEl.textContent = s >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + s + ' disponibles'; }
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarResumen();
+}
+
+function cambiarIdioma(idx, idioma) {
+  idiomaDefault = idioma;
+  const entry = itemsCotizados[idx];
+  // Cambiar solo este item al nuevo idioma, manteniendo variante
+  const nuevaFound = entry.grupo.find(c => c.variante === entry.found.variante && getStock(c) > 0);
+  if (!nuevaFound) return;
+  entry.found = nuevaFound;
+  // Actualizar estilos botones
+  const btnEng = document.getElementById('btn-eng-' + idx);
+  const btnEsp = document.getElementById('btn-esp-' + idx);
+  if (btnEng) { btnEng.style.borderColor = idioma==='ENG' ? 'var(--accent)' : 'var(--border)'; btnEng.style.color = idioma==='ENG' ? 'var(--accent)' : 'var(--text-muted)'; btnEng.style.background = idioma==='ENG' ? 'var(--accent-dim)' : 'transparent'; }
+  if (btnEsp) { btnEsp.style.borderColor = idioma==='ESP' ? 'var(--accent)' : 'var(--border)'; btnEsp.style.color = idioma==='ESP' ? 'var(--accent)' : 'var(--text-muted)'; btnEsp.style.background = idioma==='ESP' ? 'var(--accent-dim)' : 'transparent'; }
+  const max   = Math.min(12, getStock(nuevaFound));
+  entry.disp  = Math.min(entry.disp, max);
+  if (entry.disp < 1) entry.disp = 1;
+  const precio = getPrecio(nuevaFound);
+  document.getElementById('ri-price-' + idx).innerHTML =
+    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
+  const qtyEl = document.getElementById('ri-qty-' + idx);
+  if (qtyEl) qtyEl.textContent = entry.disp;
+  const idiomaEl = document.getElementById('ri-idioma-' + idx);
+  if (idiomaEl) idiomaEl.textContent = idioma;
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
@@ -684,22 +696,23 @@ function setDireccion(modo) {
 }
 
 function actualizarResumen() {
-  const nombre=document.getElementById('nombre').value.trim();
-  const usuario=document.getElementById('usuario').value.trim();
-  let html=`<div class="summary-title">Tu orden</div>`;
-  if(nombre)  html+=`<div class="summary-line"><span>Cliente</span><strong>${nombre}</strong></div>`;
-  if(usuario) html+=`<div class="summary-line"><span>Instagram</span><strong>@${usuario.replace('@','')}</strong></div>`;
-  if(entregaMode) html+=`<div class="summary-line"><span>Entrega</span><strong>${entregaMode==='retiro'?'Retiro en persona':'Envío a todo Chile'}</strong></div>`;
-  let total=0;
-  for(const e of itemsCotizados){
-    const qty=e.disp; const sub=qty*e.found.precio; total+=sub;
-    const label=getVariantLabel(e.found.nombre);
-    const varLabel=label!=='Normal'?` (${label})`:'';
-    html+=`<div class="summary-line"><span>${cap(e.item.display)}${varLabel} x${qty}</span><strong>${clp(sub)}</strong></div>`;
+  const nombre  = document.getElementById('nombre').value.trim();
+  const usuario = document.getElementById('usuario').value.trim();
+  let html = `<div class="summary-title">Tu orden</div>`;
+  if (nombre)     html += `<div class="summary-line"><span>Cliente</span><strong>${nombre}</strong></div>`;
+  if (usuario)    html += `<div class="summary-line"><span>Instagram</span><strong>@${usuario.replace('@','')}</strong></div>`;
+  if (entregaMode) html += `<div class="summary-line"><span>Entrega</span><strong>${entregaMode==='retiro'?'Retiro en persona':'Envío a todo Chile'}</strong></div>`;
+  let total = 0;
+  for (const e of itemsCotizados) {
+    const precio = getPrecio(e.found);
+    const sub    = e.disp * precio;
+    total += sub;
+    const varLabel = e.found.variante !== 'Normal' ? ` (${e.found.variante})` : '';
+    html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaDefault} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
   }
-  html+=`<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
-  const el=document.getElementById('resumenFinal');
-  if(el) el.innerHTML=html;
+  html += `<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
+  const el = document.getElementById('resumenFinal');
+  if (el) el.innerHTML = html;
 }
 
 function formatRut(el) {
@@ -756,11 +769,15 @@ async function submitPedido() {
     }
   }
 
-  const orderItems=itemsCotizados.map(e=>({
-    nombre:cap(e.item.display) + ' - ' + getVariantLabel(e.found.nombre),
-    set:e.item.set.toUpperCase(), numero:e.item.numero,
-    cantidad:e.disp, precio_clp:e.found.precio,
-    subtotal:e.disp*e.found.precio
+  const orderItems = itemsCotizados.map(e => ({
+    nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + idiomaDefault,
+    variante:  e.found.variante,
+    idioma:    idiomaDefault,
+    set:       e.item.set.toUpperCase(),
+    numero:    e.item.numero,
+    cantidad:  e.disp,
+    precio_clp: getPrecio(e.found),
+    subtotal:  e.disp * getPrecio(e.found)
   }));
 
   const orderData={
