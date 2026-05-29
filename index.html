@@ -418,9 +418,32 @@ async function cargarInventario() {
   const btn = document.getElementById('btnCotizar');
   if (btn) { btn.disabled = true; btn.textContent = 'Cargando inventario...'; }
   try {
-    const res = await fetch(SCRIPT_URL + '?carpeta=TCG');
+    const res  = await fetch(SCRIPT_URL + '?carpeta=TCG');
     const json = await res.json();
-    if (json.ok && json.data) inventario = json.data;
+    if (json.ok && json.data) {
+      // Normalizar formato: soporta tanto formato antiguo como nuevo
+      inventario = json.data.map(c => {
+        // Formato nuevo: ya tiene stk_eng, stk_esp, variante
+        if (c.stk_eng !== undefined || c.stk_esp !== undefined) return c;
+        // Formato antiguo: tiene stock y precio únicos → convertir a nuevo
+        // Intentar detectar variante del nombre
+        let variante = 'Normal';
+        const mVar = String(c.nombre || '').match(/\[(.+?)\]/);
+        if (mVar) variante = mVar[1];
+        const nombreBase = String(c.nombre || '').replace(/\s*\[.*?\]\s*/g, '').trim();
+        return {
+          nombre:    nombreBase,
+          variante,
+          set:       c.set,
+          set_nombre: c.set_nombre,
+          numero:    c.numero,
+          stk_esp:   c.stock || 0,
+          stk_eng:   c.stock || 0,
+          prc_esp:   c.precio || 0,
+          prc_eng:   c.precio || 0,
+        };
+      });
+    }
   } catch(e) {}
   if (btn) { btn.disabled = false; btn.textContent = 'Ver disponibilidad y precios →'; }
 }
