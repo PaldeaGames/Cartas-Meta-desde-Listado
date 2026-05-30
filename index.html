@@ -483,16 +483,28 @@ function parseLine(line) {
 function getStock(c) { return idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
 function getPrecio(c) { return idiomaDefault === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
 
-// Búsqueda en fases: 1=exacta(nombre+num+set), 2=nombre+num(cualquier set), 3=solo nombre(alternativa)
-// Retorna { grupo, esAlternativa } o null
+// Deduplicar el inventario — el Sheet puede tener filas idénticas (mismo nombre+set+numero+variante)
+function dedupInv(arr) {
+  const seen = new Map();
+  for (const c of arr) {
+    const k = norm(c.nombre)+'|'+norm(c.set||'')+'|'+String(parseInt(c.numero))+'|'+c.variante;
+    if (!seen.has(k)) seen.set(k, Object.assign({}, c));
+    else { seen.get(k).stk_esp += (c.stk_esp||0); seen.get(k).stk_eng += (c.stk_eng||0); }
+  }
+  return [...seen.values()];
+}
+
+// Búsqueda en 3 fases. Retorna { grupo, esAlternativa } o null.
+// Fase 1: nombre+numero+set exactos
+// Fase 2: nombre+numero, cualquier set (no es alternativa — misma carta, distinto set)
+// Fase 3: solo nombre — alternativa real (carta distinta versión del meta)
 function findGrupo(item) {
   const numNorm    = item.numeroNorm || String(parseInt(item.numero));
   const nombreBase = norm(item.nombre);
   const setItem    = item.set;
+  const inv        = dedupInv(inventario);
+  const conStock   = inv.filter(c => (c.stk_eng||0) > 0 || (c.stk_esp||0) > 0);
 
-  const conStock = inventario.filter(c => (c.stk_eng||0) > 0 || (c.stk_esp||0) > 0);
-
-  // Fase 1: nombre + numero + set exactos
   const f1 = conStock.filter(c =>
     norm(c.nombre) === nombreBase &&
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm &&
@@ -500,14 +512,12 @@ function findGrupo(item) {
   );
   if (f1.length) return { grupo: f1, esAlternativa: false };
 
-  // Fase 2: nombre + numero, cualquier set
   const f2 = conStock.filter(c =>
     norm(c.nombre) === nombreBase &&
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm
   );
   if (f2.length) return { grupo: f2, esAlternativa: false };
 
-  // Fase 3: solo nombre — alternativa de otro set
   const f3 = conStock.filter(c => norm(c.nombre) === nombreBase);
   if (f3.length) return { grupo: f3, esAlternativa: true };
 
@@ -520,26 +530,35 @@ function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 function buildControles(grupo, idx, disp, found) {
   let html = '<div style="margin-top:6px">';
 
-  // Selector de SET (si hay múltiples sets con stock)
-  const setsUnicos = [...new Map(grupo.map(c => [c.set, c])).values()];
-  const setsConStock = setsUnicos.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
-  if (setsConStock.length > 1) {
+  // SET selector — clave set|numero para distinguir munkidori PRE 44 vs TWM 95
+  const setNumMap = new Map();
+  for (const c of grupo) {
+    const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
+    if (!setNumMap.has(k)) setNumMap.set(k, c);
+  }
+  const setNumOpts = [...setNumMap.values()].filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
+  if (setNumOpts.length > 1) {
+    const foundKey = norm(found.set||'')+'|'+String(parseInt(found.numero));
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu set</div>';
     html += '<select class="variant-select" id="sel-set-' + idx + '" onchange="cambiarSet(' + idx + ',this.value)" style="margin-bottom:6px">';
-    setsConStock.forEach(c => {
-      html += '<option value="' + c.set + '"' + (c.set === found.set ? ' selected' : '') + '>' + c.set.toUpperCase() + ' ' + c.numero + '</option>';
+    setNumOpts.forEach(c => {
+      const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
+      html += '<option value="' + k + '"' + (k === foundKey ? ' selected' : '') + '>' + c.set.toUpperCase() + ' ' + c.numero + '</option>';
     });
     html += '</select>';
   }
 
-  // Selector de RAREZA
-  const setsDelFound = grupo.filter(c => c.set === found.set);
-  const variantesUnicas = [...new Set(setsDelFound.map(c => c.variante))];
+  // RAREZA selector — solo variantes del mismo set+numero que found
+  const mismoSetNum = grupo.filter(c =>
+    norm(c.set||'') === norm(found.set||'') &&
+    String(parseInt(c.numero)) === String(parseInt(found.numero))
+  );
+  const variantesUnicas = [...new Set(mismoSetNum.map(c => c.variante))];
   if (variantesUnicas.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
     html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:6px">';
     variantesUnicas.forEach(v => {
-      const c = setsDelFound.find(x => x.variante === v);
+      const c = mismoSetNum.find(x => x.variante === v);
       const precio = c ? getPrecio(c) : 0;
       html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
     });
@@ -548,24 +567,22 @@ function buildControles(grupo, idx, disp, found) {
     html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">' + found.variante + '</span>';
   }
 
-  // Botones idioma con tachado si no hay stock
-  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+  // Idioma — tachado basado en el found actual (variante+set+numero específicos)
   const engStock = found.stk_eng || 0;
   const espStock = found.stk_esp || 0;
   const engClass = 'lang-btn' + (engStock === 0 ? ' agotado' : '');
   const espClass = 'lang-btn' + (espStock === 0 ? ' agotado' : '');
   const engActive = idiomaDefault === 'ENG';
   const espActive = idiomaDefault === 'ESP';
-  html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" onclick="' + (engStock>0?'cambiarIdioma('+idx+',\'ENG\')':'') + '" style="border:1px solid ' + (engActive?'var(--accent)':'var(--border)') + ';background:' + (engActive?'var(--accent-dim)':'transparent') + ';color:' + (engActive?'var(--accent)':'var(--text-muted)') + '">ENG</button>';
-  html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" onclick="' + (espStock>0?'cambiarIdioma('+idx+',\'ESP\')':'') + '" style="border:1px solid ' + (espActive?'var(--accent)':'var(--border)') + ';background:' + (espActive?'var(--accent-dim)':'transparent') + ';color:' + (espActive?'var(--accent)':'var(--text-muted)') + '">ESP</button>';
+  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+  html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="border:1px solid ' + (engActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (engActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (engActive ? 'var(--accent)' : 'var(--text-muted)') + '">ENG</button>';
+  html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="border:1px solid ' + (espActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (espActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (espActive ? 'var(--accent)' : 'var(--text-muted)') + '">ESP</button>';
 
-  // Qty
   const stockActual = getStock(found);
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
   html += '</div>';
-
   const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
   html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
   html += '</div>';
@@ -726,11 +743,13 @@ function eliminarItem(idx) {
   actualizarResumen();
 }
 
-function cambiarSet(idx, setNombre) {
+function cambiarSet(idx, setNumKey) {
   const entry = itemsCotizados[idx];
-  const grupoSet = entry.grupo.filter(c => c.set === setNombre);
+  const [setN, numN] = setNumKey.split('|');
+  const grupoSet = entry.grupo.filter(c =>
+    norm(c.set) === setN && String(parseInt(c.numero)) === numN
+  );
   if (!grupoSet.length) return;
-  // Mantener variante si existe en nuevo set, si no tomar Normal o primera disponible
   const nuevaFound = grupoSet.find(c => c.variante === entry.found.variante && getStock(c) > 0)
     || grupoSet.find(c => c.variante === 'Normal' && getStock(c) > 0)
     || grupoSet.find(c => getStock(c) > 0)
