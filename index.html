@@ -734,16 +734,16 @@ async function cotizar() {
       || grupo.find(c => c.variante !== 'SIR' && getStock(c) > 0)
       || grupo.find(c => getStock(c) > 0)
       || grupo[0];
-    const stockFound = getStock(found);
-    const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
-    const estado = stockFound >= item.qty ? 'ok' : 'parcial';
     const tieneSIRDisp = tieneSIR(grupo);
-    // Determinar idioma inicial para esta carta
+    // Determinar idioma ANTES de calcular stock/disp
     const engStk0 = found.stk_eng || 0;
     const espStk0 = found.stk_esp || 0;
     let idiomaCard = idiomaDefault;
     if (idiomaDefault === 'ENG' && engStk0 === 0 && espStk0 > 0) idiomaCard = 'ESP';
     if (idiomaDefault === 'ESP' && espStk0 === 0 && engStk0 > 0) idiomaCard = 'ENG';
+    const stockFound = getStock(found, idiomaCard);
+    const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
+    const estado = stockFound >= item.qty ? 'ok' : 'parcial';
     cotizadosTemp.push({item, found, grupo, disp, estado, fase, tieneSIRDisp, idiomaCard});
   }
   itemsCotizados = cotizadosTemp;
