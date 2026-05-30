@@ -1131,7 +1131,7 @@ async function submitPedido() {
     if(direccionMode==='domicilio'){
       direccionStr=[val('direccion'),val('dirNumero'),val('dirDepto'),val('ciudad'),val('dirCiudad')].filter(Boolean).join(', ');
     } else {
-      direccionStr=val('nombreSucursal')+' — '+val('sucursal')+', '+val('ciudadSuc')+', '+val('ciudadSuc2');
+      direccionStr='Sucursal: '+val('nombreSucursal')+' — '+val('sucursal')+', '+val('ciudadSuc')+', '+val('ciudadSuc2');
     }
   }
 
@@ -1139,11 +1139,11 @@ async function submitPedido() {
     nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + (e.idiomaCard||idiomaDefault),
     variante:  e.found.variante,
     idioma:    e.idiomaCard||idiomaDefault,
-    set:       e.item.set.toUpperCase(),
-    numero:    e.item.numero,
+    set:       e.found.set.toUpperCase(),
+    numero:    e.found.numero,
     cantidad:  e.disp,
-    precio_clp: getPrecio(e.found),
-    subtotal:  e.disp * getPrecio(e.found)
+    precio_clp: getPrecioEntry(e),
+    subtotal:  e.disp * getPrecioEntry(e)
   }));
 
   const orderData={
@@ -1162,22 +1162,19 @@ async function submitPedido() {
   };
 
   try {
-    const res=await fetch(SCRIPT_URL+'?carpeta=TCG', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(orderData)
-    });
-    const data=await res.json();
-    if(data.success===false){
-      alert('⚠️ '+(data.error||'Error al enviar el pedido. Intenta de nuevo.'));
-      btn.disabled=false; btn.textContent='Enviar pedido →'; return;
+    const url = SCRIPT_URL + '?carpeta=TCG&data=' + encodeURIComponent(JSON.stringify(orderData));
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.success === false) {
+      alert('⚠️ ' + (data.error || 'Error al enviar el pedido. Intenta de nuevo.'));
+      btn.disabled = false; btn.textContent = 'Enviar pedido →'; return;
     }
-    document.getElementById('formSection').style.display='none';
+    document.getElementById('formSection').style.display = 'none';
     document.getElementById('successScreen').classList.add('show');
-    document.getElementById('successOrder').textContent=data.id||'TCG-0001';
-  } catch(e){
+    document.getElementById('successOrder').textContent = data.id || 'TCG-0001';
+  } catch(e) {
     alert('Error de conexión. Intenta de nuevo.');
-    btn.disabled=false; btn.textContent='Enviar pedido →';
+    btn.disabled = false; btn.textContent = 'Enviar pedido →';
   }
 }
 </script>
