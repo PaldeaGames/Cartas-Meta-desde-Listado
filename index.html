@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
 <title>Paldea Games — Cotizador TCG</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -16,9 +16,23 @@
     --orange:#f97316;--radius:12px;--radius-sm:8px;--mono:'Courier New',monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  @media(min-width:900px){html,body{touch-action:pan-x pan-y;}}
   body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;min-height:100vh;line-height:1.6}
   body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
   .page{position:relative;z-index:1;max-width:680px;margin:0 auto;padding:0 20px 80px}
+
+  /* ── Desktop 2-col layout ── */
+  @media(min-width:900px){
+    .page{max-width:1200px}
+    #layoutWrapper{display:grid;grid-template-columns:340px 1fr;gap:32px;align-items:start;min-height:calc(100vh - 200px)}
+    #colLeft{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow-y:auto}
+    #colRight{min-width:0;position:relative}
+  #barraAcciones{position:sticky;bottom:0;background:linear-gradient(to bottom, transparent, var(--bg) 40%);padding:20px 0 8px;margin-top:8px;z-index:10}
+    #stepCotizacion:not(.oculto){display:block}
+  }
+  @media(max-width:899px){
+    #colLeft,#colRight{display:block}
+  }
   .header{padding:48px 0 32px;text-align:center}
   .logo-mark{display:inline-flex;align-items:center;gap:10px;margin-bottom:20px}
   .logo-ball{width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
@@ -44,7 +58,7 @@
   input:focus,textarea:focus,select:focus{border-color:var(--accent)}
   input::placeholder,textarea::placeholder{color:var(--text-muted)}
   select option{background:#1e1e26;color:var(--text)}
-  textarea{resize:vertical;min-height:130px;font-family:var(--mono);font-size:13px;line-height:1.7}
+  textarea{resize:none;min-height:80px;font-family:var(--mono);font-size:13px;line-height:1.7;overflow:hidden}
   .field-error{font-size:12px;color:var(--red);margin-top:5px;display:none}
   .field-error.show{display:block}
   input.error,textarea.error,select.error{border-color:var(--red)}
@@ -171,35 +185,19 @@
   </div>
 
   <div id="formSection">
-
-    <!-- PASO 1: Datos -->
-    <div class="step">
-      <div class="step-header"><div class="step-num">1</div><div class="step-title">Tus datos</div></div>
-      <div class="card">
-        <div class="field">
-          <label>Nombre completo <span class="req">*</span></label>
-          <input type="text" id="nombre" placeholder="Ej: María González" />
-          <div style="font-size:12px;color:var(--text-muted);margin-top:5px">👤 Usamos tu nombre para identificarte al coordinar el pedido por Instagram.</div>
-          <div class="field-error" id="err-nombre">Ingresa tu nombre y apellido.</div>
-        </div>
-        <div class="field">
-          <label>Usuario de Instagram <span class="req">*</span></label>
-          <div class="ig-wrap" id="ig-wrap">
-            <span class="ig-prefix">@</span>
-            <input type="text" id="usuario" placeholder="tu_usuario"
-              oninput="this.value=this.value.replace(/@/g,'')"
-              onfocus="document.getElementById('ig-wrap').style.borderColor='var(--accent)'"
-              onblur="document.getElementById('ig-wrap').style.borderColor='var(--border)'" />
-          </div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📩 Te contactaremos por este usuario para confirmar y coordinar el pago.</div>
-          <div class="field-error" id="err-usuario">Necesitamos tu usuario para contactarte.</div>
-        </div>
-      </div>
+  <div id="layoutWrapper">
+  <div id="colLeft">
+    <!-- PASO INPUT: Lista del deck — siempre visible -->
+    <div class="step" id="stepInput" style="margin-top:0">
+      <div class="step-header"><div class="step-num">1</div><div class="step-title">Tu lista de deck</div></div>
+      <div class="card" id="cardInput"></div>
     </div>
+  </div>
+  <div id="colRight">
 
-    <!-- PASO 2: Lista -->
-    <div class="step">
-      <div class="step-header"><div class="step-num">2</div><div class="step-title">Tu lista de deck</div></div>
+    <!-- PASO 2: Lista (JS la mueve a colLeft) -->
+    <div id="pasoListaOriginal" style="display:none">
+      <div class="step-header" style="display:none"><div class="step-num">1</div><div class="step-title">Tu lista de deck</div></div>
       <div class="card">
         <div class="field">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -219,186 +217,223 @@
               </div>
             </div>
           </div>
-          <textarea id="deckInput" placeholder="4 Chikorita PAL 001
-2 Meganium TEF 016
-4 Boss's Orders PAL 172
-2 Professor's Research SVI 189"></textarea>
+          <textarea id="deckInput" placeholder="4 Chikorita PAL 001&#10;2 Meganium TEF 016&#10;4 Boss's Orders PAL 172&#10;2 Professor's Research SVI 189"></textarea>
           <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📋 Puedes copiar y pegar directo desde PTCGL, Limitless o cualquier app de deck building.</div>
+          <div style="font-size:12px;color:var(--blue);margin-top:6px;background:var(--blue-dim);border:1px solid rgba(71,184,255,0.2);border-radius:6px;padding:7px 10px">🌐 Los resultados se muestran en <strong>inglés (ENG)</strong> por defecto. Puedes cambiar el idioma carta por carta en los resultados.</div>
           <div class="field-error" id="err-deck">Ingresa al menos una carta en formato válido.</div>
         </div>
         <button class="cotizar-btn" id="btnCotizar" onclick="cotizar()">Ver disponibilidad y precios →</button>
       </div>
     </div>
 
-    <!-- PASO 3: Cotización -->
+    <!-- PASO 2: Cotización -->
     <div class="step" id="stepCotizacion" style="display:none">
-      <div class="step-header"><div class="step-num">3</div><div class="step-title">Cotización</div></div>
+      <div class="step-header"><div class="step-num">2</div><div class="step-title">Cotización</div></div>
       <div class="card"><div id="cotizacionResult"></div></div>
     </div>
 
-    <!-- PASO 4: Entrega -->
-    <div class="step" id="stepEntrega" style="display:none">
-      <div class="step-header"><div class="step-num">4</div><div class="step-title">¿Cómo lo recibes?</div></div>
-      <div class="card">
-        <div class="toggle-group">
-          <button class="toggle-btn" id="btnRetiro" onclick="setEntrega('retiro')">🏠 Retiro en persona</button>
-          <button class="toggle-btn" id="btnEnvio"  onclick="setEntrega('envio')">📦 Envío a todo Chile</button>
+    <!-- PASO 3: Resumen + Datos + Entrega + Enviar (todo junto) -->
+    <div id="stepPedido" style="display:none">
+
+      <!-- 3a: Resumen compacto -->
+      <div class="step" id="stepResumenCompacto">
+        <div class="step-header" style="align-items:center">
+          <div class="step-num">3</div>
+          <div class="step-title">Resumen del pedido</div>
+          <button onclick="volverACotizacion()" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border-strong);border-radius:20px;color:var(--text-soft);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;padding:5px 12px;transition:all 0.2s;font-family:'DM Sans',sans-serif" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-soft)'">← Editar cotización</button>
         </div>
-        <div class="field-error" id="err-entrega" style="margin-top:10px">Elige una opción de entrega.</div>
-
-        <!-- Retiro -->
-        <div class="section-retiro" id="sectionRetiro">
-          <div class="retiro-info">
-            <p>📍 <strong>Paldea Games</strong> — te enviamos la dirección exacta al coordinar.</p>
-            <p style="margin-top:6px">🕒 <strong>Lunes a viernes</strong> 10:00 – 18:30 &nbsp;|&nbsp; <strong>Sábado</strong> 10:00 – 14:00</p>
-            <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">También puedes retirar por conserjería con pago previo, pasas directo sin esperar 👍</p>
-            <a href="https://maps.app.goo.gl/iuDSCBxPxVADgiUKA" target="_blank" class="retiro-link">Ver referencia en el mapa →</a>
-          </div>
-          <div class="row2" style="margin-top:14px">
-            <div class="field">
-              <label>Día preferido <span class="req">*</span></label>
-              <select id="retiroDia">
-                <option value="">Elige un día</option>
-                <option>Lunes</option><option>Martes</option><option>Miércoles</option>
-                <option>Jueves</option><option>Viernes</option><option>Sábado</option>
-              </select>
-              <div class="field-error" id="err-retiroDia">Elige un día.</div>
-            </div>
-            <div class="field">
-              <label>Hora preferida <span class="req">*</span></label>
-              <select id="retiroHora">
-                <option value="">Elige una hora</option>
-                <option>10:00</option><option>10:30</option>
-                <option>11:00</option><option>11:30</option>
-                <option>12:00</option><option>12:30</option>
-                <option>13:00</option><option>13:30</option>
-                <option>14:00</option><option>14:30</option>
-                <option>15:00</option><option>15:30</option>
-                <option>16:00</option><option>16:30</option>
-                <option>17:00</option><option>17:30</option>
-                <option>18:00</option><option>18:30</option>
-              </select>
-              <div class="field-error" id="err-retiroHora">Elige una hora.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Envío -->
-        <div class="section-envio" id="sectionEnvio">
-          <div class="envio-discount"><span>✦</span> Descuento 10% en todos los envíos con Starken + Santander.</div>
-          <table class="zona-table">
-            <thead><tr><th>Zona de destino</th><th style="text-align:right">Costo aprox.</th></tr></thead>
-            <tbody>
-              <tr><td>Santiago centro / comunas cercanas<br><span style="font-size:11px;color:var(--text-muted)">Ej: Cerro Navia, San Miguel</span></td><td>~$3.590</td></tr>
-              <tr><td>Santiago periférico<br><span style="font-size:11px;color:var(--text-muted)">Ej: Quilicura, Barnechea</span></td><td>~$3.410</td></tr>
-              <tr><td>La Florida<br><span style="font-size:11px;color:var(--text-muted)">Ej: La Florida, Puente Alto</span></td><td>~$3.480</td></tr>
-              <tr><td>Región Metropolitana / V Región<br><span style="font-size:11px;color:var(--text-muted)">Ej: Viña del Mar</span></td><td>~$4.990</td></tr>
-              <tr><td>Talcahuano / Concepción<br><span style="font-size:11px;color:var(--text-muted)">Ej: Concepción, Chiguayante</span></td><td>~$5.240</td></tr>
-              <tr><td>Otras regiones de Chile</td><td>Consultar</td></tr>
-            </tbody>
-          </table>
-
-          <div class="field">
-            <label>RUT <span class="req">*</span></label>
-            <input type="text" id="rut" placeholder="12345678-9" maxlength="12"
-              oninput="formatRut(this)" />
-            <div class="field-error" id="err-rut">Ingresa tu RUT.</div>
-          </div>
-          <div class="row2">
-            <div class="field">
-              <label>Celular <span class="req">*</span></label>
-              <div class="cel-wrap" id="cel-wrap">
-                <span class="cel-prefix">+569</span>
-                <input type="tel" id="celular" placeholder="12345678" maxlength="8" inputmode="numeric"
-                  oninput="this.value=this.value.replace(/\D/g,'').slice(0,8)"
-                  onfocus="document.getElementById('cel-wrap').style.borderColor='var(--accent)'"
-                  onblur="document.getElementById('cel-wrap').style.borderColor='var(--border)'" />
-              </div>
-              <div class="field-error" id="err-celular">Ingresa exactamente 8 dígitos (sin el +569).</div>
-            </div>
-            <div class="field">
-              <label>Correo electrónico <span class="req">*</span></label>
-              <input type="email" id="correo" placeholder="tu@correo.cl" />
-              <div class="field-error" id="err-correo">Ingresa un correo válido.</div>
-            </div>
-          </div>
-
-          <label style="margin-bottom:8px;margin-top:4px;display:block">Tipo de entrega <span class="req">*</span></label>
-          <div class="addr-tabs">
-            <button class="addr-tab active" id="tabDomicilio" onclick="setDireccion('domicilio')">A domicilio</button>
-            <button class="addr-tab" id="tabSucursal" onclick="setDireccion('sucursal')">Sucursal Starken</button>
-          </div>
-
-          <!-- Domicilio -->
-          <div class="sec-domicilio" id="secDomicilio">
-            <div class="field">
-              <label>Calle <span class="req">*</span></label>
-              <input type="text" id="direccion" placeholder="Ej: Av. Nueva Providencia" />
-              <div class="field-error" id="err-direccion">Ingresa el nombre de la calle.</div>
-            </div>
-            <div class="row2">
-              <div class="field">
-                <label>Número <span class="req">*</span></label>
-                <input type="text" id="dirNumero" placeholder="Ej: 1234" />
-                <div class="field-error" id="err-dirNumero">Ingresa el número.</div>
-              </div>
-              <div class="field">
-                <label>Dpto / Casa</label>
-                <input type="text" id="dirDepto" placeholder="Ej: Depto 502, Casa B" />
-              </div>
-            </div>
-            <div class="row2">
-              <div class="field">
-                <label>Comuna <span class="req">*</span></label>
-                <input type="text" id="ciudad" placeholder="Ej: Providencia" />
-                <div class="field-error" id="err-ciudad">Ingresa tu comuna.</div>
-              </div>
-              <div class="field">
-                <label>Ciudad <span class="req">*</span></label>
-                <input type="text" id="dirCiudad" placeholder="Ej: Santiago" />
-                <div class="field-error" id="err-dirCiudad">Ingresa tu ciudad.</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sucursal Starken -->
-          <div class="sec-sucursal" id="secSucursal">
-            <div class="field">
-              <label>Nombre de la sucursal <span class="req">*</span></label>
-              <input type="text" id="nombreSucursal" placeholder="Ej: Sucursal Ricardo Lyon, Sucursal Providencia" />
-              <div class="field-error" id="err-nombreSucursal">Ingresa el nombre de la sucursal.</div>
-            </div>
-            <div class="field">
-              <label>Dirección de la sucursal <span class="req">*</span></label>
-              <input type="text" id="sucursal" placeholder="Ej: Av. Nueva Providencia 1234" />
-              <div class="field-error" id="err-sucursal">Ingresa la dirección de la sucursal.</div>
-            </div>
-            <div class="row2">
-              <div class="field">
-                <label>Comuna <span class="req">*</span></label>
-                <input type="text" id="ciudadSuc" placeholder="Ej: Providencia" />
-                <div class="field-error" id="err-ciudadSuc">Ingresa tu comuna.</div>
-              </div>
-              <div class="field">
-                <label>Ciudad <span class="req">*</span></label>
-                <input type="text" id="ciudadSuc2" placeholder="Ej: Santiago" />
-                <div class="field-error" id="err-ciudadSuc2">Ingresa tu ciudad.</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div class="card" id="resumenCompactoContent" style="padding:14px 16px"></div>
       </div>
-    </div>
 
-    <!-- PASO 5: Confirmar -->
-    <div class="step" id="stepConfirmar" style="display:none">
-      <div class="step-header"><div class="step-num">5</div><div class="step-title">Resumen de tu pedido</div></div>
-      <div class="summary-card" id="resumenFinal"></div>
-      <button class="submit-btn" id="submitBtn" onclick="submitPedido()">Enviar pedido →</button>
-      <p class="footer-note">Al enviar este formulario nos contactaremos contigo por Instagram para coordinar el pago y la entrega.<br>Nada se cobra aquí — esto es solo una orden de pedido.</p>
-    </div>
+      <!-- 3b: Datos + Entrega en card unificado -->
+      <div class="step" id="stepDatos">
+        <div class="step-header"><div class="step-num">4</div><div class="step-title">Tus datos y entrega</div></div>
+        <div class="card">
 
+          <!-- Datos personales -->
+          <div class="field">
+            <label>Nombre completo <span class="req">*</span></label>
+            <input type="text" id="nombre" placeholder="Ej: María González" />
+            <div class="field-error" id="err-nombre">Ingresa tu nombre y apellido.</div>
+          </div>
+          <div class="field">
+            <label>Usuario de Instagram <span class="req">*</span></label>
+            <div class="ig-wrap" id="ig-wrap">
+              <span class="ig-prefix">@</span>
+              <input type="text" id="usuario" placeholder="tu_usuario"
+                oninput="this.value=this.value.replace(/@/g,'')"
+                onfocus="document.getElementById('ig-wrap').style.borderColor='var(--accent)'"
+                onblur="document.getElementById('ig-wrap').style.borderColor='var(--border)'" />
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📩 Te contactaremos por este usuario para confirmar y coordinar el pago.</div>
+            <div class="field-error" id="err-usuario">Necesitamos tu usuario para contactarte.</div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);margin:18px 0 16px"></div>
+
+          <!-- ¿Cómo lo recibes? -->
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px">¿Cómo lo recibes?</div>
+          <div class="toggle-group">
+            <button class="toggle-btn" id="btnRetiro" onclick="setEntrega('retiro')">🏠 Retiro en persona</button>
+            <button class="toggle-btn" id="btnEnvio"  onclick="setEntrega('envio')">📦 Envío a todo Chile</button>
+          </div>
+          <div class="field-error" id="err-entrega" style="margin-top:10px">Elige una opción de entrega.</div>
+
+          <!-- Retiro -->
+          <div class="section-retiro" id="sectionRetiro">
+            <div class="retiro-info">
+              <p>📍 <strong>Paldea Games</strong> — te enviamos la dirección exacta al coordinar.</p>
+              <p style="margin-top:6px">🕒 <strong>Lunes a viernes</strong> 10:00 – 18:30 &nbsp;|&nbsp; <strong>Sábado</strong> 10:00 – 14:00</p>
+              <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">También puedes retirar por conserjería con pago previo, pasas directo sin esperar 👍</p>
+              <a href="https://maps.app.goo.gl/iuDSCBxPxVADgiUKA" target="_blank" class="retiro-link">Ver referencia en el mapa →</a>
+            </div>
+            <div class="row2" style="margin-top:14px">
+              <div class="field">
+                <label>Día preferido <span class="req">*</span></label>
+                <select id="retiroDia">
+                  <option value="">Elige un día</option>
+                  <option>Lunes</option><option>Martes</option><option>Miércoles</option>
+                  <option>Jueves</option><option>Viernes</option><option>Sábado</option>
+                </select>
+                <div class="field-error" id="err-retiroDia">Elige un día.</div>
+              </div>
+              <div class="field">
+                <label>Hora preferida <span class="req">*</span></label>
+                <select id="retiroHora">
+                  <option value="">Elige una hora</option>
+                  <option>10:00</option><option>10:30</option>
+                  <option>11:00</option><option>11:30</option>
+                  <option>12:00</option><option>12:30</option>
+                  <option>13:00</option><option>13:30</option>
+                  <option>14:00</option><option>14:30</option>
+                  <option>15:00</option><option>15:30</option>
+                  <option>16:00</option><option>16:30</option>
+                  <option>17:00</option><option>17:30</option>
+                  <option>18:00</option><option>18:30</option>
+                </select>
+                <div class="field-error" id="err-retiroHora">Elige una hora.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Envío -->
+          <div class="section-envio" id="sectionEnvio">
+            <div class="envio-discount"><span>✦</span> Descuento 10% en todos los envíos con Starken + Santander.</div>
+            <table class="zona-table">
+              <thead><tr><th>Zona de destino</th><th style="text-align:right">Costo aprox.</th></tr></thead>
+              <tbody>
+                <tr><td>Santiago centro / comunas cercanas<br><span style="font-size:11px;color:var(--text-muted)">Ej: Cerro Navia, San Miguel</span></td><td>~$3.590</td></tr>
+                <tr><td>Santiago periférico<br><span style="font-size:11px;color:var(--text-muted)">Ej: Quilicura, Barnechea</span></td><td>~$3.410</td></tr>
+                <tr><td>La Florida<br><span style="font-size:11px;color:var(--text-muted)">Ej: La Florida, Puente Alto</span></td><td>~$3.480</td></tr>
+                <tr><td>Región Metropolitana / V Región<br><span style="font-size:11px;color:var(--text-muted)">Ej: Viña del Mar</span></td><td>~$4.990</td></tr>
+                <tr><td>Talcahuano / Concepción<br><span style="font-size:11px;color:var(--text-muted)">Ej: Concepción, Chiguayante</span></td><td>~$5.240</td></tr>
+                <tr><td>Otras regiones de Chile</td><td>Consultar</td></tr>
+              </tbody>
+            </table>
+            <div class="field">
+              <label>RUT <span class="req">*</span></label>
+              <input type="text" id="rut" placeholder="12345678-9" maxlength="12" oninput="formatRut(this)" />
+              <div class="field-error" id="err-rut">Ingresa tu RUT.</div>
+            </div>
+            <div class="row2">
+              <div class="field">
+                <label>Celular <span class="req">*</span></label>
+                <div class="cel-wrap" id="cel-wrap">
+                  <span class="cel-prefix">+569</span>
+                  <input type="tel" id="celular" placeholder="12345678" maxlength="8" inputmode="numeric"
+                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,8)"
+                    onfocus="document.getElementById('cel-wrap').style.borderColor='var(--accent)'"
+                    onblur="document.getElementById('cel-wrap').style.borderColor='var(--border)'" />
+                </div>
+                <div class="field-error" id="err-celular">Ingresa exactamente 8 dígitos (sin el +569).</div>
+              </div>
+              <div class="field">
+                <label>Correo electrónico <span class="req">*</span></label>
+                <input type="email" id="correo" placeholder="tu@correo.cl" />
+                <div class="field-error" id="err-correo">Ingresa un correo válido.</div>
+              </div>
+            </div>
+            <label style="margin-bottom:8px;margin-top:4px;display:block">Tipo de entrega <span class="req">*</span></label>
+            <div class="addr-tabs">
+              <button class="addr-tab active" id="tabDomicilio" onclick="setDireccion('domicilio')">A domicilio</button>
+              <button class="addr-tab" id="tabSucursal" onclick="setDireccion('sucursal')">Sucursal Starken</button>
+            </div>
+            <!-- Domicilio -->
+            <div class="sec-domicilio" id="secDomicilio">
+              <div class="field">
+                <label>Calle <span class="req">*</span></label>
+                <input type="text" id="direccion" placeholder="Ej: Av. Nueva Providencia" />
+                <div class="field-error" id="err-direccion">Ingresa el nombre de la calle.</div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label>Número <span class="req">*</span></label>
+                  <input type="text" id="dirNumero" placeholder="Ej: 1234" />
+                  <div class="field-error" id="err-dirNumero">Ingresa el número.</div>
+                </div>
+                <div class="field">
+                  <label>Dpto / Casa</label>
+                  <input type="text" id="dirDepto" placeholder="Ej: Depto 502, Casa B" />
+                </div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label>Comuna <span class="req">*</span></label>
+                  <input type="text" id="ciudad" placeholder="Ej: Providencia" />
+                  <div class="field-error" id="err-ciudad">Ingresa tu comuna.</div>
+                </div>
+                <div class="field">
+                  <label>Ciudad <span class="req">*</span></label>
+                  <input type="text" id="dirCiudad" placeholder="Ej: Santiago" />
+                  <div class="field-error" id="err-dirCiudad">Ingresa tu ciudad.</div>
+                </div>
+              </div>
+            </div>
+            <!-- Sucursal Starken -->
+            <div class="sec-sucursal" id="secSucursal">
+              <div class="field">
+                <label>Nombre de la sucursal <span class="req">*</span></label>
+                <input type="text" id="nombreSucursal" placeholder="Ej: Sucursal Ricardo Lyon, Sucursal Providencia" />
+                <div class="field-error" id="err-nombreSucursal">Ingresa el nombre de la sucursal.</div>
+              </div>
+              <div class="field">
+                <label>Dirección de la sucursal <span class="req">*</span></label>
+                <input type="text" id="sucursal" placeholder="Ej: Av. Nueva Providencia 1234" />
+                <div class="field-error" id="err-sucursal">Ingresa la dirección de la sucursal.</div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label>Comuna <span class="req">*</span></label>
+                  <input type="text" id="ciudadSuc" placeholder="Ej: Providencia" />
+                  <div class="field-error" id="err-ciudadSuc">Ingresa tu comuna.</div>
+                </div>
+                <div class="field">
+                  <label>Ciudad <span class="req">*</span></label>
+                  <input type="text" id="ciudadSuc2" placeholder="Ej: Santiago" />
+                  <div class="field-error" id="err-ciudadSuc2">Ingresa tu ciudad.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /card unificado -->
+      </div><!-- /stepDatos -->
+
+      <!-- Enviar pedido -->
+      <div class="step" id="stepConfirmar">
+        <button class="submit-btn" id="submitBtn" onclick="submitPedido()">Enviar pedido →</button>
+        <p class="footer-note">Al enviar este formulario nos contactaremos contigo por Instagram para coordinar el pago y la entrega.<br>Nada se cobra aquí — esto es solo una orden de pedido.</p>
+      </div>
+
+    </div><!-- /stepPedido -->
+
+  <!-- Barra sticky con CTA -->
+  <div id="barraAcciones" style="display:none">
+    <button class="cotizar-btn" onclick="mostrarFormPedido()">Continuar con el pedido →</button>
   </div>
+  </div><!-- /colRight -->
+  </div><!-- /layoutWrapper -->
+  </div><!-- /formSection -->
 
   <!-- Éxito -->
   <div class="success-screen" id="successScreen">
@@ -413,6 +448,18 @@
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymkq81nv85-kf3QIbjnkPfYyQwN6PZIn9r8GsJ7iVMYbgL5CtvLCADHc9c5CCXtMCl/exec';
+
+// Bloquear zoom con Ctrl+scroll solo en desktop
+(function(){
+  if(window.innerWidth>=900||!('ontouchstart' in window)){
+    document.addEventListener('wheel', function(e){
+      if(e.ctrlKey){ e.preventDefault(); }
+    }, {passive:false});
+    document.addEventListener('keydown', function(e){
+      if(e.ctrlKey && (e.key==='+' || e.key==='-' || e.key==='=')){e.preventDefault();}
+    });
+  }
+})();
 let inventario = [];
 let itemsCotizados = [];
 let entregaMode = null;
@@ -454,6 +501,29 @@ async function cargarInventario() {
 }
 cargarInventario();
 
+// Mover el card real del paso lista a colLeft (sin clonar)
+(function() {
+  const src = document.getElementById('pasoListaOriginal');
+  const dst = document.getElementById('cardInput');
+  if (src && dst) {
+    const card = src.querySelector('.card');
+    if (card) {
+      // Mover nodo real — mantiene IDs y eventos originales
+      dst.parentNode.replaceChild(card, dst);
+      card.id = 'cardInput';
+    }
+    src.remove();
+  }
+  // Auto-resize textarea
+  const ta = document.getElementById('deckInput');
+  if (ta) {
+    ta.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.max(80, this.scrollHeight) + 'px';
+    });
+  }
+})();
+
 function norm(v) { return String(v||'').trim().toLowerCase(); }
 
 function parseLine(line) {
@@ -480,8 +550,10 @@ function parseLine(line) {
 
 // Busca todas las entradas del inventario para una carta (nombre+set+numero)
 // El inventario nuevo tiene una entrada por carta×variante con stk_esp y stk_eng
-function getStock(c) { return idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
-function getPrecio(c) { return idiomaDefault === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
+function getStock(c, idioma) { const id = idioma || idiomaDefault; return id === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
+function getPrecio(c, idioma) { const id = idioma || idiomaDefault; return id === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
+function getStockEntry(e) { return getStock(e.found, e.idiomaCard); }
+function getPrecioEntry(e) { return getPrecio(e.found, e.idiomaCard); }
 
 // Deduplicar el inventario — el Sheet puede tener filas idénticas (mismo nombre+set+numero+variante)
 function dedupInv(arr) {
@@ -510,60 +582,43 @@ function findGrupo(item) {
   const inv        = dedupInv(inventario);
   const conStock   = inv.filter(c => (c.stk_eng||0) > 0 || (c.stk_esp||0) > 0);
 
-  const f1 = conStock.filter(c =>
-    norm(c.nombre) === nombreBase &&
+  // Grupo siempre incluye TODAS las cartas del mismo nombre con stock
+  const grupoNombre = conStock.filter(c => norm(c.nombre) === nombreBase);
+  if (!grupoNombre.length) return null;
+
+  // Fase 1: match exacto nombre+numero+set
+  const f1 = grupoNombre.filter(c =>
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm &&
     norm(c.set||'') === setItem
   );
-  if (f1.length) return { grupo: f1, fase: 1 };
+  if (f1.length) return { grupo: grupoNombre, fase: 1, found: f1[0] };
 
-  const f2 = conStock.filter(c =>
-    norm(c.nombre) === nombreBase &&
+  // Fase 2: match nombre+numero (cualquier set)
+  const f2 = grupoNombre.filter(c =>
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm
   );
-  if (f2.length) return { grupo: f2, fase: 2 };
+  if (f2.length) return { grupo: grupoNombre, fase: 2, found: f2[0] };
 
-  const f3 = conStock.filter(c => norm(c.nombre) === nombreBase);
-  if (f3.length) return { grupo: f3, fase: 3 };
-
-  return null;
+  // Fase 3: solo nombre
+  return { grupo: grupoNombre, fase: 3, found: grupoNombre[0] };
 }
 
 function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
 function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
-function buildControles(grupo, idx, disp, found) {
+function buildControles(grupo, idx, disp, found, idiomaCard) {
+  if (!idiomaCard) idiomaCard = idiomaDefault;
   let html = '<div style="margin-top:6px">';
 
-  // ── RAREZA selector ─────────────────────────────────────
-  // Todas las variantes del set+numero actual del found
-  const mismoSetNum = grupo.filter(c =>
-    norm(c.set||'') === norm(found.set||'') &&
-    String(parseInt(c.numero)) === String(parseInt(found.numero))
-  );
-  const variantesUnicas = [...new Set(mismoSetNum.map(c => c.variante))];
-  if (variantesUnicas.length > 1) {
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
-    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
-    variantesUnicas.forEach(v => {
-      const c = mismoSetNum.find(x => x.variante === v);
-      const precio = c ? getPrecio(c) : 0;
-      html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
-    });
-    html += '</select>';
-  } else if (found.variante !== 'Normal') {
-    html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:6px">' + found.variante + '</span>';
-  }
-
-  // ── SET selector ─────────────────────────────────────────
-  // Agrupa por set+numero, muestra todos con stock
+  // ── SET selector — solo si NO tiene SIR en el grupo ────────
+  const tieneSIRGrupo = grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
   const setNumMap = new Map();
   for (const c of grupo) {
     const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
     if (!setNumMap.has(k)) setNumMap.set(k, c);
   }
   const setNumOpts = [...setNumMap.values()].filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
-  if (setNumOpts.length > 1) {
+  if (!tieneSIRGrupo && setNumOpts.length > 1) {
     const foundKey = norm(found.set||'')+'|'+String(parseInt(found.numero));
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu set</div>';
     html += '<select class="variant-select" id="sel-set-' + idx + '" onchange="cambiarSet(' + idx + ',this.value)" style="margin-bottom:8px">';
@@ -574,28 +629,35 @@ function buildControles(grupo, idx, disp, found) {
     html += '</select>';
   }
 
+  // ── RAREZA selector ─────────────────────────────────────
+  // Incluye todas las variantes del grupo completo (cualquier set/numero)
+  const todasVariantes = [...new Map(grupo.map(c => [c.variante, c])).values()];
+  const variantesUnicas = todasVariantes.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante);
+  if (variantesUnicas.length > 1) {
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
+    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
+    variantesUnicas.forEach(v => {
+      const c = grupo.find(x => x.variante === v && ((x.stk_eng||0)+(x.stk_esp||0) > 0));
+      const precio = c ? getPrecio(c) : 0;
+      html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
+    });
+    html += '</select>';
+  }
+
   // ── IDIOMA ────────────────────────────────────────────────
   const engStock = found.stk_eng || 0;
   const espStock = found.stk_esp || 0;
-  let idiomaEfectivo = idiomaDefault;
-  if (idiomaDefault === 'ENG' && engStock === 0 && espStock > 0) idiomaEfectivo = 'ESP';
-  if (idiomaDefault === 'ESP' && espStock === 0 && engStock > 0) idiomaEfectivo = 'ENG';
-  const engClass = 'lang-btn' + (engStock === 0 ? ' agotado' : '');
-  const espClass = 'lang-btn' + (espStock === 0 ? ' agotado' : '');
-  const engActive = idiomaEfectivo === 'ENG';
-  const espActive = idiomaEfectivo === 'ESP';
+  const engActive = idiomaCard === 'ENG';
+  const espActive = idiomaCard === 'ESP';
+  const engStyle = 'border:1px solid ' + (engActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (engActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (engActive ? 'var(--accent)' : 'var(--text-muted)') + ';opacity:' + (engStock===0?'0.35':'1') + ';text-decoration:' + (engStock===0?'line-through':'none');
+  const espStyle = 'border:1px solid ' + (espActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (espActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (espActive ? 'var(--accent)' : 'var(--text-muted)') + ';opacity:' + (espStock===0?'0.35':'1') + ';text-decoration:' + (espStock===0?'line-through':'none');
   html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
-  html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="border:1px solid ' + (engActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (engActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (engActive ? 'var(--accent)' : 'var(--text-muted)') + '">ENG</button>';
-  html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="border:1px solid ' + (espActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (espActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (espActive ? 'var(--accent)' : 'var(--text-muted)') + '">ESP</button>';
-  const stockActual = idiomaEfectivo === 'ENG' ? engStock : espStock;
+  html += '<button id="btn-eng-' + idx + '" class="lang-btn" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="' + engStyle + '">ENG</button>';
+  html += '<button id="btn-esp-' + idx + '" class="lang-btn" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="' + espStyle + '">ESP</button>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
   html += '</div>';
-  if (stockActual > 0) {
-    const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
-    html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
-  }
   html += '</div>';
   return html;
 }
@@ -603,17 +665,44 @@ function buildControles(grupo, idx, disp, found) {
 async function cotizar() {
   const raw = document.getElementById('deckInput').value.trim();
   const errDeck = document.getElementById('err-deck');
-  if (!raw) { errDeck.classList.add('show'); return; }
+  if (!raw) { errDeck.classList.add('show'); errDeck.textContent='Ingresa al menos una carta en formato válido.'; return; }
   errDeck.classList.remove('show');
+
+  // Validar que el contenido pegado sea una lista de deck válida
+  // Se ignoran líneas de sección (Pokemon/Trainer/Energy/Total) y líneas vacías
+  const lineas = raw.split('\n');
+  const lineasNoVacias = lineas.filter(l => {
+    const t = l.trim();
+    if (!t) return false;
+    if (t.startsWith('//') || t.startsWith('#')) return false;
+    const low = t.toLowerCase();
+    if (low.startsWith('pokemon')||low.startsWith('trainer')||low.startsWith('energy')||low.startsWith('total')) return false;
+    if (t.startsWith('*')) return true; // formato PTCGL
+    return true;
+  });
+  const itemsValidos = lineasNoVacias.filter(l => parseLine(l) !== null);
+  // Si hay líneas no-vacías pero menos del 30% son válidas → no es un deck list
+  if (lineasNoVacias.length > 0 && itemsValidos.length / lineasNoVacias.length < 0.30) {
+    errDeck.classList.add('show');
+    errDeck.textContent = 'El texto no parece una lista de deck válida. Pega el formato desde PTCGL, Limitless o similar (ej: 4 Dreepy TWM 128).';
+    return;
+  }
+
   const items = raw.split('\n').map(parseLine).filter(Boolean);
-  if (!items.length) { errDeck.classList.add('show'); return; }
+  if (!items.length) {
+    errDeck.classList.add('show');
+    errDeck.textContent='No reconocimos ninguna carta en tu lista. Asegúrate de pegar el formato desde PTCGL o Limitless (ej: 4 Dreepy TWM 128).';
+    return;
+  }
   // Garantizar que el inventario esté cargado
   if (inventario.length === 0) {
     await cargarInventario();
+
+
   }
   if (inventario.length === 0) {
     document.getElementById('cotizacionResult').innerHTML = '<p style="color:var(--red);font-size:13px">No se pudo cargar el inventario. Intenta de nuevo.</p>';
-    document.getElementById('stepCotizacion').style.display = 'block';
+    document.getElementById('stepCotizacion').style.display='block';document.getElementById('stepCotizacion').classList.remove('oculto');
     return;
   }
 
@@ -624,8 +713,9 @@ async function cotizar() {
     const resultado = findGrupo(item);
     if (!resultado) { nope.push(item); continue; }
     const { grupo, fase } = resultado;
-    // Preferir Normal con stock, luego cualquier variante no-SIR, luego SIR
-    const found = grupo.find(c => c.variante === 'Normal' && getStock(c) > 0)
+    // Usar found del resultado (ya apunta al set/numero pedido); fallback a preferencia Normal
+    const found = resultado.found
+      || grupo.find(c => c.variante === 'Normal' && getStock(c) > 0)
       || grupo.find(c => c.variante !== 'SIR' && getStock(c) > 0)
       || grupo.find(c => getStock(c) > 0)
       || grupo[0];
@@ -633,7 +723,13 @@ async function cotizar() {
     const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
     const estado = stockFound >= item.qty ? 'ok' : 'parcial';
     const tieneSIRDisp = tieneSIR(grupo);
-    cotizadosTemp.push({item, found, grupo, disp, estado, fase, tieneSIRDisp});
+    // Determinar idioma inicial para esta carta
+    const engStk0 = found.stk_eng || 0;
+    const espStk0 = found.stk_esp || 0;
+    let idiomaCard = idiomaDefault;
+    if (idiomaDefault === 'ENG' && engStk0 === 0 && espStk0 > 0) idiomaCard = 'ESP';
+    if (idiomaDefault === 'ESP' && espStk0 === 0 && engStk0 > 0) idiomaCard = 'ENG';
+    cotizadosTemp.push({item, found, grupo, disp, estado, fase, tieneSIRDisp, idiomaCard});
   }
   itemsCotizados = cotizadosTemp;
 
@@ -642,13 +738,24 @@ async function cotizar() {
 
   cotizadosTemp.forEach((entry, idx) => {
     const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
-    const precio = getPrecio(found);
+    const precio = getPrecioEntry(entry);
     const subTotal = disp * precio;
 
     // Badge: "En stock", "Stock parcial" (solo si disp > 0), SIR badge
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
-    else if (estado === 'parcial' && disp > 0) badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+    else if (estado === 'parcial' && disp > 0) {
+      badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+      // ¿Hay otro set del mismo nombre que sí cumple la cantidad completa?
+      const altCompleto = grupo.filter(c =>
+        (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
+        getStock(c) >= item.qty
+      );
+      if (altCompleto.length > 0) {
+        const alt = altCompleto[0];
+        badgesHtml += `<div style="font-size:11px;color:var(--green);margin-top:4px">✓ ${alt.set.toUpperCase()} ${alt.numero} tiene ${getStock(alt)} disponibles y puede completar tu pedido</div>`;
+      }
+    }
     if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
 
     // Aviso solo en fase 3 (distinto set Y numero)
@@ -659,11 +766,10 @@ async function cotizar() {
     html += `<div class="result-item" id="ri-${idx}">
       <div class="ri-left" style="flex:1;min-width:0">
         <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
-        <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
+        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
         ${avisoSet}
         <div style="margin-top:4px">${badgesHtml}</div>
-        ${buildControles(grupo, idx, disp, found)}
+        ${buildControles(grupo, idx, disp, found, entry.idiomaCard)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
         <button class="ri-remove" onclick="eliminarItem(${idx})" title="Quitar carta">✕</button>
@@ -680,33 +786,34 @@ async function cotizar() {
     for (const d of nope) html += `<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">No en inventario</span></div></div>`;
   }
 
-  const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const cartasSi  = cotizadosTemp.reduce((s,e) => s + e.disp, 0);
   const cartasNo  = nope.reduce((s,d) => s + d.qty, 0);
 
   html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
 
-  if (itemsCotizados.length > 0)
-    html += `<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
+  // Mostrar barra sticky de acción
+  const barraEl = document.getElementById('barraAcciones');
+  if (barraEl) barraEl.style.display = itemsCotizados.length > 0 ? 'block' : 'none';
 
   document.getElementById('cotizacionResult').innerHTML = html;
-  document.getElementById('stepCotizacion').style.display = 'block';
+  document.getElementById('stepCotizacion').style.display='block';document.getElementById('stepCotizacion').classList.remove('oculto');
   document.getElementById('stepCotizacion').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function cambiarQty(idx, delta) {
   const entry = itemsCotizados[idx];
-  const max   = Math.min(12, getStock(entry.found));
-  const nueva = Math.min(max, Math.max(1, entry.disp + delta));
+  const max   = Math.min(12, getStock(entry.found, entry.idiomaCard));
+  const nueva = Math.min(max, Math.max(0, entry.disp + delta));
   entry.disp  = nueva;
-  const precio = getPrecio(entry.found);
+  const precio = getPrecio(entry.found, entry.idiomaCard);
   const sub    = nueva * precio;
   const qtyEl  = document.getElementById('ri-qty-' + idx);
   qtyEl.textContent = nueva;
-  qtyEl.style.color = nueva >= max ? 'var(--red)' : 'var(--text)';
+  qtyEl.style.color = nueva === 0 ? 'var(--text-muted)' : nueva >= max ? 'var(--red)' : 'var(--text)';
   document.getElementById('ri-price-' + idx).innerHTML =
     `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
@@ -722,7 +829,7 @@ function eliminarItem(idx) {
   if (itemsCotizados.length) html += '<div class="section-label">Disponibles</div>';
   itemsCotizados.forEach((entry, i) => {
     const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
-    const precio = getPrecio(found);
+    const precio = getPrecioEntry(entry);
     const subTotal = disp * precio;
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
@@ -734,11 +841,10 @@ function eliminarItem(idx) {
     html += `<div class="result-item" id="ri-${i}">
       <div class="ri-left" style="flex:1;min-width:0">
         <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaDefault}</span></div>
-        <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
+        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${entry.idiomaCard}</span></div>
         ${avisoSet}
         <div style="margin-top:4px">${badgesHtml}</div>
-        ${buildControles(grupo, i, disp, found)}
+        ${buildControles(grupo, i, disp, found, entry.idiomaCard)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
         <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
@@ -754,10 +860,11 @@ function eliminarItem(idx) {
   const resumenEl = document.getElementById('resumen-cotizacion');
   const btnCont = cont.querySelector('.cotizar-btn');
   // Recalcular totales
-  const totalDisp = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const totalDisp = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const cartasSi  = itemsCotizados.reduce((s,e) => s + e.disp, 0);
   html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi}</strong></div><div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
-  if (itemsCotizados.length > 0) html += `<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
+  const barraEl2 = document.getElementById('barraAcciones');
+  if (barraEl2) barraEl2.style.display = itemsCotizados.length > 0 ? 'block' : 'none';
   cont.innerHTML = html;
   actualizarResumen();
 }
@@ -790,69 +897,138 @@ function cambiarSet(idx, setNumKey) {
   if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) qtyEl.textContent = entry.disp;
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
 }
 
 function cambiarVariante(idx, varNombre) {
-  const entry   = itemsCotizados[idx];
-  const nuevaFound = entry.grupo.find(c => c.variante === varNombre && getStock(c) > 0);
+  const entry = itemsCotizados[idx];
+  const engOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_eng || 0) > 0;
+  const espOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_esp || 0) > 0;
+  // Auto-ajustar idioma PER CARD (no global) según disponibilidad de la variante elegida
+  let nuevoIdiomaCard = entry.idiomaCard;
+  if (nuevoIdiomaCard === 'ENG' && !engOkVar && espOkVar) nuevoIdiomaCard = 'ESP';
+  if (nuevoIdiomaCard === 'ESP' && !espOkVar && engOkVar) nuevoIdiomaCard = 'ENG';
+  entry.idiomaCard = nuevoIdiomaCard;
+  let nuevaFound = entry.grupo.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
+    || entry.grupo.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
   if (!nuevaFound) return;
   entry.found = nuevaFound;
-  const max   = Math.min(12, getStock(nuevaFound));
-  entry.disp  = Math.min(entry.disp, max);
-  if (entry.disp < 1) entry.disp = 1;
-  const precio = getPrecio(nuevaFound);
-  const sub    = entry.disp * precio;
+  const engOk = (nuevaFound.stk_eng || 0) > 0;
+  const espOk = (nuevaFound.stk_esp || 0) > 0;
+  const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
+  entry.disp = Math.min(entry.disp, max);
+  if (entry.disp < 0) entry.disp = 0;
+  const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
+  const sub = entry.disp * precio;
   document.getElementById('ri-price-' + idx).innerHTML =
     `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
   const rarezaEl = document.getElementById('ri-rareza-' + idx);
   if (rarezaEl) rarezaEl.textContent = nuevaFound.variante;
+  const idiomaEl = document.getElementById('ri-idioma-' + idx);
+  if (idiomaEl) idiomaEl.textContent = nuevoIdiomaCard;
+  // Re-renderizar botones idioma reflejando disponibilidad real
+  const btnEng = document.getElementById('btn-eng-' + idx);
+  const btnEsp = document.getElementById('btn-esp-' + idx);
+  if (btnEng) {
+    btnEng.style.borderColor = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--border)';
+    btnEng.style.color = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEng.style.background = nuevoIdiomaCard==='ENG' ? 'var(--accent-dim)' : 'transparent';
+    btnEng.style.opacity = engOk ? '1' : '0.35';
+    btnEng.style.textDecoration = engOk ? 'none' : 'line-through';
+    if (engOk) btnEng.setAttribute('onclick', `cambiarIdioma(${idx},'ENG')`);
+    else btnEng.removeAttribute('onclick');
+  }
+  if (btnEsp) {
+    btnEsp.style.borderColor = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--border)';
+    btnEsp.style.color = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEsp.style.background = nuevoIdiomaCard==='ESP' ? 'var(--accent-dim)' : 'transparent';
+    btnEsp.style.opacity = espOk ? '1' : '0.35';
+    btnEsp.style.textDecoration = espOk ? 'none' : 'line-through';
+    if (espOk) btnEsp.setAttribute('onclick', `cambiarIdioma(${idx},'ESP')`);
+    else btnEsp.removeAttribute('onclick');
+  }
   const msgEl = document.getElementById('ri-' + idx)?.querySelector('.stock-msg');
-  if (msgEl) { const s = getStock(nuevaFound); msgEl.textContent = s >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + s + ' disponibles'; }
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  if (msgEl) msgEl.remove();
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
 }
 
 function cambiarIdioma(idx, idioma) {
-  idiomaDefault = idioma;
   const entry = itemsCotizados[idx];
+  entry.idiomaCard = idioma;
   // Cambiar solo este item al nuevo idioma, manteniendo variante
-  const nuevaFound = entry.grupo.find(c => c.variante === entry.found.variante && getStock(c) > 0);
+  const nuevaFound = entry.grupo.find(c => c.variante === entry.found.variante && getStock(c, idioma) > 0)
+    || entry.grupo.find(c => c.variante === entry.found.variante);
   if (!nuevaFound) return;
   entry.found = nuevaFound;
+  const engOk = (nuevaFound.stk_eng || 0) > 0;
+  const espOk = (nuevaFound.stk_esp || 0) > 0;
   // Actualizar estilos botones
   const btnEng = document.getElementById('btn-eng-' + idx);
   const btnEsp = document.getElementById('btn-esp-' + idx);
-  if (btnEng) { btnEng.style.borderColor = idioma==='ENG' ? 'var(--accent)' : 'var(--border)'; btnEng.style.color = idioma==='ENG' ? 'var(--accent)' : 'var(--text-muted)'; btnEng.style.background = idioma==='ENG' ? 'var(--accent-dim)' : 'transparent'; }
-  if (btnEsp) { btnEsp.style.borderColor = idioma==='ESP' ? 'var(--accent)' : 'var(--border)'; btnEsp.style.color = idioma==='ESP' ? 'var(--accent)' : 'var(--text-muted)'; btnEsp.style.background = idioma==='ESP' ? 'var(--accent-dim)' : 'transparent'; }
-  const max   = Math.min(12, getStock(nuevaFound));
+  if (btnEng) {
+    btnEng.style.borderColor = idioma==='ENG' ? 'var(--accent)' : 'var(--border)';
+    btnEng.style.color = idioma==='ENG' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEng.style.background = idioma==='ENG' ? 'var(--accent-dim)' : 'transparent';
+    btnEng.style.opacity = engOk ? '1' : '0.35';
+    btnEng.style.textDecoration = engOk ? 'none' : 'line-through';
+  }
+  if (btnEsp) {
+    btnEsp.style.borderColor = idioma==='ESP' ? 'var(--accent)' : 'var(--border)';
+    btnEsp.style.color = idioma==='ESP' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEsp.style.background = idioma==='ESP' ? 'var(--accent-dim)' : 'transparent';
+    btnEsp.style.opacity = espOk ? '1' : '0.35';
+    btnEsp.style.textDecoration = espOk ? 'none' : 'line-through';
+  }
+  const max   = Math.min(12, getStock(nuevaFound, idioma));
   entry.disp  = Math.min(entry.disp, max);
   if (entry.disp < 1) entry.disp = 1;
-  const precio = getPrecio(nuevaFound);
+  const precio = getPrecio(nuevaFound, idioma);
   document.getElementById('ri-price-' + idx).innerHTML =
     `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) qtyEl.textContent = entry.disp;
   const idiomaEl = document.getElementById('ri-idioma-' + idx);
   if (idiomaEl) idiomaEl.textContent = idioma;
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
   actualizarResumen();
 }
 
 function mostrarFormPedido() {
-  document.getElementById('stepEntrega').style.display='block';
-  document.getElementById('stepConfirmar').style.display='block';
+  const cot = document.getElementById('stepCotizacion');
+  cot.style.display='none';
+  cot.classList.add('oculto');
+  if (window.innerWidth < 900) {
+    document.getElementById('colLeft').style.display='none';
+  }
+  document.getElementById('stepPedido').style.display='block';
+  const b=document.getElementById('barraAcciones'); if(b) b.style.display='none';
   actualizarResumen();
-  document.getElementById('stepEntrega').scrollIntoView({behavior:'smooth',block:'start'});
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function volverACotizacion() {
+  document.getElementById('stepPedido').style.display='none';
+  document.getElementById('colLeft').style.display='block';
+  document.getElementById('stepCotizacion').style.display='block';document.getElementById('stepCotizacion').classList.remove('oculto');
+  const b2=document.getElementById('barraAcciones'); if(b2 && itemsCotizados.length>0) b2.style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function volverAInicio() {
+  document.getElementById('stepPedido').style.display='none';
+  document.getElementById('stepCotizacion').style.display='none';document.getElementById('stepCotizacion').classList.add('oculto');
+  document.getElementById('colLeft').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function setEntrega(modo) {
@@ -881,16 +1057,28 @@ function actualizarResumen() {
   if (usuario)    html += `<div class="summary-line"><span>Instagram</span><strong>@${usuario.replace('@','')}</strong></div>`;
   if (entregaMode) html += `<div class="summary-line"><span>Entrega</span><strong>${entregaMode==='retiro'?'Retiro en persona':'Envío a todo Chile'}</strong></div>`;
   let total = 0;
+  // Resumen compacto de cartas
+  let compactoHtml = '';
   for (const e of itemsCotizados) {
-    const precio = getPrecio(e.found);
+    const precio = getPrecioEntry(e);
     const sub    = e.disp * precio;
     total += sub;
-    const varLabel = e.found.variante !== 'Normal' ? ` (${e.found.variante})` : '';
-    html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaDefault} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
+    const varLabel = e.found.variante !== 'Normal' ? ` · ${e.found.variante}` : '';
+    const idiomaCard = (e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP';
+    html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
+    if (e.disp > 0) {
+      compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--text-soft)">${cap(e.item.display)}${varLabel} <span style="font-size:11px;color:var(--text-muted)">${e.found.set.toUpperCase()} · ${idiomaCard} · x${e.disp}</span></span>
+        <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(sub)}</strong>
+      </div>`;
+    }
   }
+  compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:15px;padding:10px 0 4px;font-family:'Syne',sans-serif;font-weight:700">
+    <span style="color:var(--text-muted)">Total</span><strong style="color:var(--accent)">${clp(total)}</strong>
+  </div>`;
   html += `<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
-  const el = document.getElementById('resumenFinal');
-  if (el) el.innerHTML = html;
+  const elC = document.getElementById('resumenCompactoContent');
+  if (elC) elC.innerHTML = compactoHtml;
 }
 
 function formatRut(el) {
@@ -948,9 +1136,9 @@ async function submitPedido() {
   }
 
   const orderItems = itemsCotizados.map(e => ({
-    nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + idiomaDefault,
+    nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + (e.idiomaCard||idiomaDefault),
     variante:  e.found.variante,
-    idioma:    idiomaDefault,
+    idioma:    e.idiomaCard||idiomaDefault,
     set:       e.item.set.toUpperCase(),
     numero:    e.item.numero,
     cantidad:  e.disp,
@@ -974,7 +1162,11 @@ async function submitPedido() {
   };
 
   try {
-    const res=await fetch(SCRIPT_URL+'?data='+encodeURIComponent(JSON.stringify(orderData)));
+    const res=await fetch(SCRIPT_URL+'?carpeta=TCG', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(orderData)
+    });
     const data=await res.json();
     if(data.success===false){
       alert('⚠️ '+(data.error||'Error al enviar el pedido. Intenta de nuevo.'));
