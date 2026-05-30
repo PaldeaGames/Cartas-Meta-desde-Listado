@@ -629,18 +629,22 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
     html += '</select>';
   }
 
-  // ── RAREZA selector — solo variantes del set+numero actual ─
-  const mismoSetNum = grupo.filter(c =>
-    norm(c.set||'') === norm(found.set||'') &&
-    String(parseInt(c.numero)) === String(parseInt(found.numero))
+  // ── RAREZA selector — variantes del set+numero del found ───
+  // Normalizar set y numero del found para comparar
+  const foundSetNorm = norm(found.set||'');
+  const foundNumNorm = String(parseInt(found.numero));
+  let mismoSetNum = grupo.filter(c =>
+    norm(c.set||'') === foundSetNorm &&
+    String(parseInt(c.numero)) === foundNumNorm
   );
+  // Fallback: si no hay coincidencias (found de fase 3 con set alternativo), usar todo el grupo
+  if (!mismoSetNum.length) mismoSetNum = grupo;
   const variantesUnicas = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
   if (variantesUnicas.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
     html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
     variantesUnicas.forEach(v => {
       const c = mismoSetNum.find(x => x.variante === v && ((x.stk_eng||0)+(x.stk_esp||0) > 0));
-      // Precio según idioma efectivo de la carta
       const precioEng = c ? (c.prc_eng || 0) : 0;
       const precioEsp = c ? (c.prc_esp || 0) : 0;
       const engTieneStock = c ? (c.stk_eng||0) > 0 : false;
