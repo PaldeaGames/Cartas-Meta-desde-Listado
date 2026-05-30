@@ -629,16 +629,22 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
     html += '</select>';
   }
 
-  // ── RAREZA selector ─────────────────────────────────────
-  // Incluye todas las variantes del grupo completo (cualquier set/numero)
-  const todasVariantes = [...new Map(grupo.map(c => [c.variante, c])).values()];
-  const variantesUnicas = todasVariantes.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante);
+  // ── RAREZA selector — solo variantes del set+numero actual ─
+  const mismoSetNum = grupo.filter(c =>
+    norm(c.set||'') === norm(found.set||'') &&
+    String(parseInt(c.numero)) === String(parseInt(found.numero))
+  );
+  const variantesUnicas = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
   if (variantesUnicas.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
     html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
     variantesUnicas.forEach(v => {
-      const c = grupo.find(x => x.variante === v && ((x.stk_eng||0)+(x.stk_esp||0) > 0));
-      const precio = c ? getPrecio(c) : 0;
+      const c = mismoSetNum.find(x => x.variante === v && ((x.stk_eng||0)+(x.stk_esp||0) > 0));
+      // Precio según idioma efectivo de la carta
+      const precioEng = c ? (c.prc_eng || 0) : 0;
+      const precioEsp = c ? (c.prc_esp || 0) : 0;
+      const engTieneStock = c ? (c.stk_eng||0) > 0 : false;
+      const precio = (idiomaCard === 'ENG' && engTieneStock) ? precioEng : precioEsp || precioEng;
       html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
     });
     html += '</select>';
@@ -833,7 +839,17 @@ function eliminarItem(idx) {
     const subTotal = disp * precio;
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
-    else if (estado === 'parcial' && disp > 0) badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+    else if (estado === 'parcial' && disp > 0) {
+      badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+      const altCompleto = grupo.filter(c =>
+        (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
+        getStock(c, entry.idiomaCard) >= item.qty
+      );
+      if (altCompleto.length > 0) {
+        const alt = altCompleto[0];
+        badgesHtml += `<div style="font-size:11px;color:var(--green);margin-top:4px">✓ ${alt.set.toUpperCase()} ${alt.numero} tiene ${getStock(alt, entry.idiomaCard)} disponibles y puede completar tu pedido</div>`;
+      }
+    }
     if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
     const avisoSet = fase === 3
       ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
@@ -880,23 +896,74 @@ function cambiarSet(idx, setNumKey) {
     || grupoSet.find(c => c.variante === 'Normal' && getStock(c) > 0)
     || grupoSet.find(c => getStock(c) > 0)
     || grupoSet[0];
+  // Auto-ajustar idioma al disponible en el nuevo set
+  const engNuevo = (nuevaFound.stk_eng || 0) > 0;
+  const espNuevo = (nuevaFound.stk_esp || 0) > 0;
+  let nuevoIdiomaCard = entry.idiomaCard;
+  if (nuevoIdiomaCard === 'ENG' && !engNuevo && espNuevo) nuevoIdiomaCard = 'ESP';
+  if (nuevoIdiomaCard === 'ESP' && !espNuevo && engNuevo) nuevoIdiomaCard = 'ENG';
+  entry.idiomaCard = nuevoIdiomaCard;
   entry.found = nuevaFound;
   entry.esAlternativa = false;
-  const max = Math.min(12, getStock(nuevaFound));
-  entry.disp = Math.min(entry.disp, max) || 1;
-  // Reconstruir controles
+  const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
+  entry.disp = Math.min(entry.disp, max);
+  // Actualizar meta
   const riEl = document.getElementById('ri-' + idx);
   if (riEl) {
-    const ctrlEl = riEl.querySelector('[id^="sel-set-"], .stock-msg')?.closest('div[style]') || riEl.querySelector('.ri-left > div:last-child');
-    // Actualizar meta set/numero
     const metaEl = riEl.querySelector('.ri-meta');
-    if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase() + ' ' + nuevaFound.numero + ' · <span id="ri-rareza-' + idx + '">' + nuevaFound.variante + '</span> · <span id="ri-idioma-' + idx + '">' + idiomaDefault + '</span>';
+    if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase() + ' ' + nuevaFound.numero + ' · <span id="ri-rareza-' + idx + '">' + nuevaFound.variante + '</span> · <span id="ri-idioma-' + idx + '">' + nuevoIdiomaCard + '</span>';
   }
-  const precio = getPrecio(nuevaFound);
+  const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
   const priceEl = document.getElementById('ri-price-' + idx);
   if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) qtyEl.textContent = entry.disp;
+  // Actualizar botones idioma
+  const btnEngS = document.getElementById('btn-eng-' + idx);
+  const btnEspS = document.getElementById('btn-esp-' + idx);
+  if (btnEngS) {
+    btnEngS.style.borderColor = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--border)';
+    btnEngS.style.color = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEngS.style.background = nuevoIdiomaCard==='ENG' ? 'var(--accent-dim)' : 'transparent';
+    btnEngS.style.opacity = engNuevo ? '1' : '0.35';
+    btnEngS.style.textDecoration = engNuevo ? 'none' : 'line-through';
+    if (engNuevo) btnEngS.setAttribute('onclick', `cambiarIdioma(${idx},'ENG')`);
+    else btnEngS.removeAttribute('onclick');
+  }
+  if (btnEspS) {
+    btnEspS.style.borderColor = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--border)';
+    btnEspS.style.color = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--text-muted)';
+    btnEspS.style.background = nuevoIdiomaCard==='ESP' ? 'var(--accent-dim)' : 'transparent';
+    btnEspS.style.opacity = espNuevo ? '1' : '0.35';
+    btnEspS.style.textDecoration = espNuevo ? 'none' : 'line-through';
+    if (espNuevo) btnEspS.setAttribute('onclick', `cambiarIdioma(${idx},'ESP')`);
+    else btnEspS.removeAttribute('onclick');
+  }
+  // Re-renderizar selector rareza con precios del nuevo set
+  const selVar = document.getElementById('sel-var-' + idx);
+  if (selVar) {
+    const mismoSetNum = entry.grupo.filter(c =>
+      norm(c.set||'') === norm(nuevaFound.set||'') &&
+      String(parseInt(c.numero)) === String(parseInt(nuevaFound.numero))
+    );
+    const vars = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
+    if (vars.length > 1) {
+      selVar.innerHTML = '';
+      vars.forEach(v => {
+        const c = mismoSetNum.find(x => x.variante === v);
+        const p = c ? getPrecio(c) : 0;
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v + (p > 0 ? ' — ' + clp(p) : '');
+        if (v === nuevaFound.variante) opt.selected = true;
+        selVar.appendChild(opt);
+      });
+      selVar.previousElementSibling && (selVar.style.display = '');
+    } else {
+      selVar.style.display = 'none';
+      if (selVar.previousElementSibling) selVar.previousElementSibling.style.display = 'none';
+    }
+  }
   const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
@@ -912,7 +979,14 @@ function cambiarVariante(idx, varNombre) {
   if (nuevoIdiomaCard === 'ENG' && !engOkVar && espOkVar) nuevoIdiomaCard = 'ESP';
   if (nuevoIdiomaCard === 'ESP' && !espOkVar && engOkVar) nuevoIdiomaCard = 'ENG';
   entry.idiomaCard = nuevoIdiomaCard;
-  let nuevaFound = entry.grupo.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
+  // Buscar variante en el mismo set+numero del found actual
+  const mismoSetActual = entry.grupo.filter(c =>
+    norm(c.set||'') === norm(entry.found.set||'') &&
+    String(parseInt(c.numero)) === String(parseInt(entry.found.numero))
+  );
+  let nuevaFound = mismoSetActual.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
+    || mismoSetActual.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0))
+    || entry.grupo.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
     || entry.grupo.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
   if (!nuevaFound) return;
   entry.found = nuevaFound;
@@ -989,7 +1063,7 @@ function cambiarIdioma(idx, idioma) {
   }
   const max   = Math.min(12, getStock(nuevaFound, idioma));
   entry.disp  = Math.min(entry.disp, max);
-  if (entry.disp < 1) entry.disp = 1;
+  if (entry.disp < 0) entry.disp = 0;
   const precio = getPrecio(nuevaFound, idioma);
   document.getElementById('ri-price-' + idx).innerHTML =
     `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
