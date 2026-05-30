@@ -629,16 +629,21 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
     html += '</select>';
   }
 
-  // ── RAREZA selector — variantes del set+numero del found ───
-  // Normalizar set y numero del found para comparar
+  // ── RAREZA selector ────────────────────────────────────────
+  // Si el grupo tiene SIR: mostrar variantes de todo el grupo (EX + SIR + etc)
+  // Si no: filtrar solo por el set+numero del found actual
   const foundSetNorm = norm(found.set||'');
   const foundNumNorm = String(parseInt(found.numero));
-  let mismoSetNum = grupo.filter(c =>
-    norm(c.set||'') === foundSetNorm &&
-    String(parseInt(c.numero)) === foundNumNorm
-  );
-  // Fallback: si no hay coincidencias (found de fase 3 con set alternativo), usar todo el grupo
-  if (!mismoSetNum.length) mismoSetNum = grupo;
+  let mismoSetNum;
+  if (tieneSIRGrupo) {
+    mismoSetNum = grupo;
+  } else {
+    mismoSetNum = grupo.filter(c =>
+      norm(c.set||'') === foundSetNorm &&
+      String(parseInt(c.numero)) === foundNumNorm
+    );
+    if (!mismoSetNum.length) mismoSetNum = grupo;
+  }
   const variantesUnicas = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
   if (variantesUnicas.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
