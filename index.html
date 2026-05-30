@@ -72,6 +72,7 @@
   .badge-ok{background:rgba(71,255,178,0.15);color:var(--green)}
   .badge-no{background:rgba(255,77,77,0.15);color:var(--red)}
   .badge-par{background:rgba(249,115,22,0.15);color:var(--orange)}
+  .badge-alt{background:rgba(71,184,255,0.15);color:var(--blue)}
   .ri-right{text-align:right;flex-shrink:0}
   .ri-unit{font-size:11px;color:var(--text-muted);margin-bottom:2px}
   .ri-sub{font-size:16px;font-weight:700;color:var(--text)}
@@ -463,33 +464,46 @@ function parseLine(line) {
   return { qty:parseInt(m[1]), nombre:norm(m[2]), set:norm(m[3]), numero:m[4].trim(), numeroNorm:numNorm, display:m[2].trim() };
 }
 
-// Busca todas las entradas del inventario para una carta (nombre+set+numero)
-// El inventario nuevo tiene una entrada por carta×variante con stk_esp y stk_eng
-function findGrupo(item) {
-  const numNorm = item.numeroNorm || String(parseInt(item.numero));
-  const nombreBase = norm(item.nombre);
-  const setItem = item.set;
-  return inventario.filter(c => {
-    const cNombre = norm(c.nombre);
-    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, "");
-    const cSet    = norm(c.set || '');
-    const stockDisp = idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0);
-    return cNombre === nombreBase &&
-           (cSet === setItem || cNum === numNorm) &&
-           cNum === numNorm &&
-           stockDisp > 0;
-  });
-}
-
 // Precio y stock según idioma seleccionado
 function getStock(c) { return idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
 function getPrecio(c) { return idiomaDefault === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
 
-// Verifica si una carta existe en inventario aunque sin stock en idioma actual
-function findAny(item) {
-  const numNorm = item.numeroNorm || String(parseInt(item.numero));
+// Búsqueda en dos fases:
+// Fase 1 — exacta: nombre + número + set coinciden y hay stock
+// Fase 2 — alternativa: solo nombre coincide y hay stock (distinto set, misma carta jugable)
+// Retorna { grupo, esAlternativa } o null si no hay nada
+function findGrupo(item) {
+  const numNorm    = item.numeroNorm || String(parseInt(item.numero));
   const nombreBase = norm(item.nombre);
-  return inventario.find(c => norm(c.nombre) === nombreBase && String(parseInt(c.numero)) === numNorm);
+  const setItem    = item.set;
+
+  // Fase 1: exacta — nombre + número + set
+  const exacta = inventario.filter(c => {
+    const cNombre = norm(c.nombre);
+    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, '');
+    const cSet    = norm(c.set || '');
+    return cNombre === nombreBase &&
+           cNum === numNorm &&
+           cSet === setItem &&
+           getStock(c) > 0;
+  });
+  if (exacta.length > 0) return { grupo: exacta, esAlternativa: false };
+
+  // Fase 2: fallback por número sin importar set
+  const porNumero = inventario.filter(c => {
+    const cNombre = norm(c.nombre);
+    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, '');
+    return cNombre === nombreBase && cNum === numNorm && getStock(c) > 0;
+  });
+  if (porNumero.length > 0) return { grupo: porNumero, esAlternativa: false };
+
+  // Fase 3: alternativa — solo nombre, cualquier set/número con stock
+  const alternativa = inventario.filter(c =>
+    norm(c.nombre) === nombreBase && getStock(c) > 0
+  );
+  if (alternativa.length > 0) return { grupo: alternativa, esAlternativa: true };
+
+  return null;
 }
 
 function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
@@ -563,18 +577,16 @@ async function cotizar() {
   const cotizadosTemp = [];
 
   for (const item of items) {
-    // Buscar todas las variantes disponibles en el idioma actual
-    const grupo = findGrupo(item);
-    if (!grupo.length) {
-      const anyFound = findAny(item);
-      nope.push({...item, sinStock: !!anyFound}); continue;
+    const resultado = findGrupo(item);
+    if (!resultado) {
+      nope.push({...item, sinStock: false}); continue;
     }
-    // Por defecto: Normal primero, si no la primera disponible
+    const { grupo, esAlternativa } = resultado;
     const found = grupo.find(c => c.variante === 'Normal') || grupo[0];
     const stockFound = getStock(found);
     const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
-    const estado = stockFound >= item.qty ? 'ok' : 'parcial';
-    cotizadosTemp.push({item, found, grupo, disp, estado});
+    const estado = esAlternativa ? 'alternativa' : (stockFound >= item.qty ? 'ok' : 'parcial');
+    cotizadosTemp.push({item, found, grupo, disp, estado, esAlternativa});
   }
   itemsCotizados = cotizadosTemp;
 
@@ -582,18 +594,28 @@ async function cotizar() {
   if (cotizadosTemp.length) html += '<div class="section-label">Disponibles</div>';
 
   cotizadosTemp.forEach((entry, idx) => {
-    const {item, found, grupo, disp, estado} = entry;
+    const {item, found, grupo, disp, estado, esAlternativa} = entry;
     const precio = getPrecio(found);
     const subTotal = disp * precio;
-    const badgeHtml = estado === 'ok'
-      ? `<span class="ri-badge badge-ok">En stock</span>`
-      : `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
+    let badgeHtml = '';
+    if (estado === 'ok') {
+      badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
+    } else if (estado === 'parcial') {
+      badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
+    } else {
+      badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
+    }
+    // Si es alternativa, mostrar aviso de set distinto
+    const altAviso = esAlternativa
+      ? `<div style="font-size:11px;color:var(--blue);margin-top:3px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
+      : '';
 
     html += `<div class="result-item" id="ri-${idx}">
       <div class="ri-left">
         <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${item.set.toUpperCase()} ${item.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
+        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
         <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
+        ${altAviso}
         <div style="margin-top:6px">${badgeHtml}</div>
         ${buildControles(grupo, idx, disp, found)}
       </div>
@@ -606,7 +628,7 @@ async function cotizar() {
 
   if (nope.length) {
     html += '<div class="section-label">No disponibles</div>';
-    for (const d of nope) html += `<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">${d.sinStock ? 'Sin stock en este idioma' : 'No en inventario'}</span></div></div>`;
+    for (const d of nope) html += `<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">No en inventario</span></div></div>`;
   }
 
   const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
