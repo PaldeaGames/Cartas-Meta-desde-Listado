@@ -494,10 +494,15 @@ function dedupInv(arr) {
   return [...seen.values()];
 }
 
-// Búsqueda en 3 fases. Retorna { grupo, esAlternativa } o null.
+// Retorna true si la carta tiene SIR con stock en el grupo
+function tieneSIR(grupo) {
+  return grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0) > 0 || (c.stk_esp||0) > 0));
+}
+
+// Búsqueda en 3 fases. Retorna { grupo, fase } o null.
 // Fase 1: nombre+numero+set exactos
-// Fase 2: nombre+numero, cualquier set (no es alternativa — misma carta, distinto set)
-// Fase 3: solo nombre — alternativa real (carta distinta versión del meta)
+// Fase 2: nombre+numero, cualquier set (misma carta jugable, distinto set — NO es alternativa)
+// Fase 3: solo nombre (distinto set Y numero — mostrar con aviso "Pediste → Tenemos")
 function findGrupo(item) {
   const numNorm    = item.numeroNorm || String(parseInt(item.numero));
   const nombreBase = norm(item.nombre);
@@ -510,16 +515,16 @@ function findGrupo(item) {
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm &&
     norm(c.set||'') === setItem
   );
-  if (f1.length) return { grupo: f1, esAlternativa: false };
+  if (f1.length) return { grupo: f1, fase: 1 };
 
   const f2 = conStock.filter(c =>
     norm(c.nombre) === nombreBase &&
     String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm
   );
-  if (f2.length) return { grupo: f2, esAlternativa: false };
+  if (f2.length) return { grupo: f2, fase: 2 };
 
   const f3 = conStock.filter(c => norm(c.nombre) === nombreBase);
-  if (f3.length) return { grupo: f3, esAlternativa: true };
+  if (f3.length) return { grupo: f3, fase: 3 };
 
   return null;
 }
@@ -530,7 +535,7 @@ function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 function buildControles(grupo, idx, disp, found) {
   let html = '<div style="margin-top:6px">';
 
-  // SET selector — clave set|numero para distinguir munkidori PRE 44 vs TWM 95
+  // SET selector — aparece siempre que haya más de un set+numero con stock
   const setNumMap = new Map();
   for (const c of grupo) {
     const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
@@ -548,7 +553,7 @@ function buildControles(grupo, idx, disp, found) {
     html += '</select>';
   }
 
-  // RAREZA selector — solo variantes del mismo set+numero que found
+  // RAREZA selector — variantes del set+numero actual
   const mismoSetNum = grupo.filter(c =>
     norm(c.set||'') === norm(found.set||'') &&
     String(parseInt(c.numero)) === String(parseInt(found.numero))
@@ -567,24 +572,30 @@ function buildControles(grupo, idx, disp, found) {
     html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">' + found.variante + '</span>';
   }
 
-  // Idioma — tachado basado en el found actual (variante+set+numero específicos)
+  // Idioma — seleccionar automáticamente el idioma con stock si el default no tiene
   const engStock = found.stk_eng || 0;
   const espStock = found.stk_esp || 0;
+  // Auto-corregir idioma si el default no tiene stock
+  let idiomaEfectivo = idiomaDefault;
+  if (idiomaDefault === 'ENG' && engStock === 0 && espStock > 0) idiomaEfectivo = 'ESP';
+  if (idiomaDefault === 'ESP' && espStock === 0 && engStock > 0) idiomaEfectivo = 'ENG';
   const engClass = 'lang-btn' + (engStock === 0 ? ' agotado' : '');
   const espClass = 'lang-btn' + (espStock === 0 ? ' agotado' : '');
-  const engActive = idiomaDefault === 'ENG';
-  const espActive = idiomaDefault === 'ESP';
+  const engActive = idiomaEfectivo === 'ENG';
+  const espActive = idiomaEfectivo === 'ESP';
   html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="border:1px solid ' + (engActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (engActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (engActive ? 'var(--accent)' : 'var(--text-muted)') + '">ENG</button>';
   html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="border:1px solid ' + (espActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (espActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (espActive ? 'var(--accent)' : 'var(--text-muted)') + '">ESP</button>';
 
-  const stockActual = getStock(found);
+  const stockActual = idiomaEfectivo === 'ENG' ? engStock : espStock;
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
   html += '</div>';
-  const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
-  html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
+  if (stockActual > 0) {
+    const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
+    html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
+  }
   html += '</div>';
   return html;
 }
@@ -612,12 +623,20 @@ async function cotizar() {
   for (const item of items) {
     const resultado = findGrupo(item);
     if (!resultado) { nope.push(item); continue; }
-    const { grupo, esAlternativa } = resultado;
-    const found = grupo.find(c => c.variante === 'Normal' && getStock(c) > 0) || grupo.find(c => getStock(c) > 0) || grupo[0];
+    const { grupo, fase } = resultado;
+    // Preferir Normal con stock, luego cualquier variante no-SIR, luego SIR
+    const found = grupo.find(c => c.variante === 'Normal' && getStock(c) > 0)
+      || grupo.find(c => c.variante !== 'SIR' && getStock(c) > 0)
+      || grupo.find(c => getStock(c) > 0)
+      || grupo[0];
     const stockFound = getStock(found);
     const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
-    const estado = esAlternativa ? 'alternativa' : (stockFound >= item.qty ? 'ok' : 'parcial');
-    cotizadosTemp.push({item, found, grupo, disp, estado, esAlternativa});
+    const estado = stockFound >= item.qty ? 'ok' : 'parcial';
+    const tieneSIRDisp = tieneSIR(grupo.filter(c =>
+      norm(c.set||'') === norm(found.set||'') &&
+      String(parseInt(c.numero)) === String(parseInt(found.numero))
+    ));
+    cotizadosTemp.push({item, found, grupo, disp, estado, fase, tieneSIRDisp});
   }
   itemsCotizados = cotizadosTemp;
 
@@ -625,15 +644,18 @@ async function cotizar() {
   if (cotizadosTemp.length) html += '<div class="section-label">Disponibles</div>';
 
   cotizadosTemp.forEach((entry, idx) => {
-    const {item, found, grupo, disp, estado, esAlternativa} = entry;
+    const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
     const precio = getPrecio(found);
     const subTotal = disp * precio;
-    let badgeHtml = '';
-    if (estado === 'ok')          badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
-    else if (estado === 'parcial') badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
-    else                           badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
 
-    const altAviso = esAlternativa
+    // Badge: "En stock", "Stock parcial" (solo si disp > 0), SIR badge
+    let badgesHtml = '';
+    if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
+    else if (estado === 'parcial' && disp > 0) badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+    if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
+
+    // Aviso solo en fase 3 (distinto set Y numero)
+    const avisoSet = fase === 3
       ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
       : '';
 
@@ -642,8 +664,8 @@ async function cotizar() {
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
         <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
-        ${altAviso}
-        <div style="margin-top:4px">${badgeHtml}</div>
+        ${avisoSet}
+        <div style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, idx, disp, found)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
@@ -702,14 +724,14 @@ function eliminarItem(idx) {
   let html = '';
   if (itemsCotizados.length) html += '<div class="section-label">Disponibles</div>';
   itemsCotizados.forEach((entry, i) => {
-    const {item, found, grupo, disp, estado, esAlternativa} = entry;
+    const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
     const precio = getPrecio(found);
     const subTotal = disp * precio;
-    let badgeHtml = '';
-    if (estado === 'ok')           badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
-    else if (estado === 'parcial') badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
-    else                           badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
-    const altAviso = esAlternativa
+    let badgesHtml = '';
+    if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
+    else if (estado === 'parcial' && disp > 0) badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
+    if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
+    const avisoSet = fase === 3
       ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
       : '';
     html += `<div class="result-item" id="ri-${i}">
@@ -717,8 +739,8 @@ function eliminarItem(idx) {
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaDefault}</span></div>
         <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
-        ${altAviso}
-        <div style="margin-top:4px">${badgeHtml}</div>
+        ${avisoSet}
+        <div style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, i, disp, found)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
