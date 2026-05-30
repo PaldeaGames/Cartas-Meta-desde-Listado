@@ -535,46 +535,8 @@ function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 function buildControles(grupo, idx, disp, found) {
   let html = '<div style="margin-top:6px">';
 
-  // SET selector — agrupa por set+numero, muestra todos con stock
-  const setNumMap = new Map();
-  for (const c of grupo) {
-    const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
-    if (!setNumMap.has(k)) setNumMap.set(k, c);
-  }
-  const setNumOpts = [...setNumMap.values()].filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
-  // Siempre mostrar selector si hay más de un set+numero disponible (aunque tengan distinto numero)
-  if (setNumOpts.length > 1) {
-    const foundKey = norm(found.set||'')+'|'+String(parseInt(found.numero));
-    html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">';
-    html += '<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu set</div>';
-    html += '<select class="variant-select" id="sel-set-' + idx + '" onchange="cambiarSet(' + idx + ',this.value)">';
-    setNumOpts.forEach(c => {
-      const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
-      html += '<option value="' + k + '"' + (k === foundKey ? ' selected' : '') + '>' + c.set.toUpperCase() + ' ' + c.numero + '</option>';
-    });
-    html += '</select></div>';
-    // Rareza inline junto al set
-    const mismoSetNumInline = grupo.filter(c =>
-      norm(c.set||'') === norm(found.set||'') &&
-      String(parseInt(c.numero)) === String(parseInt(found.numero))
-    );
-    const varInline = [...new Set(mismoSetNumInline.map(c => c.variante))];
-    if (varInline.length > 1) {
-      html += '<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
-      html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)">';
-      varInline.forEach(v => {
-        const c = mismoSetNumInline.find(x => x.variante === v);
-        const precio = c ? getPrecio(c) : 0;
-        html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
-      });
-      html += '</select></div>';
-    } else if (found.variante !== 'Normal') {
-      html += '<div style="font-size:11px;color:var(--text-muted);align-self:flex-end;padding-bottom:2px">' + found.variante + '</div>';
-    }
-    html += '</div>';
-  } else {
-
-  // RAREZA selector — solo cuando hay un único set+numero (si hay varios, ya se mostró arriba)
+  // ── RAREZA selector ─────────────────────────────────────
+  // Todas las variantes del set+numero actual del found
   const mismoSetNum = grupo.filter(c =>
     norm(c.set||'') === norm(found.set||'') &&
     String(parseInt(c.numero)) === String(parseInt(found.numero))
@@ -582,7 +544,7 @@ function buildControles(grupo, idx, disp, found) {
   const variantesUnicas = [...new Set(mismoSetNum.map(c => c.variante))];
   if (variantesUnicas.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
-    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:6px">';
+    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
     variantesUnicas.forEach(v => {
       const c = mismoSetNum.find(x => x.variante === v);
       const precio = c ? getPrecio(c) : 0;
@@ -590,14 +552,31 @@ function buildControles(grupo, idx, disp, found) {
     });
     html += '</select>';
   } else if (found.variante !== 'Normal') {
-    html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">' + found.variante + '</span>';
+    html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:6px">' + found.variante + '</span>';
   }
-  }  // cierre del else (un solo set)
 
-  // Idioma — seleccionar automáticamente el idioma con stock si el default no tiene
+  // ── SET selector ─────────────────────────────────────────
+  // Agrupa por set+numero, muestra todos con stock
+  const setNumMap = new Map();
+  for (const c of grupo) {
+    const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
+    if (!setNumMap.has(k)) setNumMap.set(k, c);
+  }
+  const setNumOpts = [...setNumMap.values()].filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
+  if (setNumOpts.length > 1) {
+    const foundKey = norm(found.set||'')+'|'+String(parseInt(found.numero));
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu set</div>';
+    html += '<select class="variant-select" id="sel-set-' + idx + '" onchange="cambiarSet(' + idx + ',this.value)" style="margin-bottom:8px">';
+    setNumOpts.forEach(c => {
+      const k = norm(c.set||'')+'|'+String(parseInt(c.numero));
+      html += '<option value="' + k + '"' + (k === foundKey ? ' selected' : '') + '>' + c.set.toUpperCase() + ' ' + c.numero + '</option>';
+    });
+    html += '</select>';
+  }
+
+  // ── IDIOMA ────────────────────────────────────────────────
   const engStock = found.stk_eng || 0;
   const espStock = found.stk_esp || 0;
-  // Auto-corregir idioma si el default no tiene stock
   let idiomaEfectivo = idiomaDefault;
   if (idiomaDefault === 'ENG' && engStock === 0 && espStock > 0) idiomaEfectivo = 'ESP';
   if (idiomaDefault === 'ESP' && espStock === 0 && engStock > 0) idiomaEfectivo = 'ENG';
@@ -608,7 +587,6 @@ function buildControles(grupo, idx, disp, found) {
   html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="border:1px solid ' + (engActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (engActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (engActive ? 'var(--accent)' : 'var(--text-muted)') + '">ENG</button>';
   html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="border:1px solid ' + (espActive ? 'var(--accent)' : 'var(--border)') + ';background:' + (espActive ? 'var(--accent-dim)' : 'transparent') + ';color:' + (espActive ? 'var(--accent)' : 'var(--text-muted)') + '">ESP</button>';
-
   const stockActual = idiomaEfectivo === 'ENG' ? engStock : espStock;
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
