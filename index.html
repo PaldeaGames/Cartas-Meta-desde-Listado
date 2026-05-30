@@ -773,16 +773,22 @@ async function cotizar() {
     }
     if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
 
-    // Aviso solo en fase 3 (distinto set Y numero)
+    // Aviso fase 3 (distinto set Y numero)
     const avisoSet = fase === 3
       ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
+      : '';
+    // Aviso idioma auto-cambiado (pedido en ENG pero solo hay ESP, o viceversa)
+    const avisoIdioma = (idiomaDefault === 'ENG' && entry.idiomaCard === 'ESP')
+      ? `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ESP — no en ENG</div>`
+      : (idiomaDefault === 'ESP' && entry.idiomaCard === 'ENG')
+      ? `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ENG — no en ESP</div>`
       : '';
 
     html += `<div class="result-item" id="ri-${idx}">
       <div class="ri-left" style="flex:1;min-width:0">
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
-        ${avisoSet}
+        ${avisoSet}${avisoIdioma}
         <div style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, idx, disp, found, entry.idiomaCard)}
       </div>
