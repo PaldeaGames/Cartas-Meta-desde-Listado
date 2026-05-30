@@ -73,6 +73,10 @@
   .badge-no{background:rgba(255,77,77,0.15);color:var(--red)}
   .badge-par{background:rgba(249,115,22,0.15);color:var(--orange)}
   .badge-alt{background:rgba(71,184,255,0.15);color:var(--blue)}
+  .lang-btn{font-size:11px;padding:2px 10px;border-radius:20px;cursor:pointer;transition:all 0.15s}
+  .lang-btn.agotado{opacity:0.35;text-decoration:line-through;cursor:not-allowed}
+  .ri-remove{background:none;border:none;color:var(--text-muted);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1;border-radius:4px;transition:color 0.15s;flex-shrink:0}
+  .ri-remove:hover{color:var(--red)}
   .ri-right{text-align:right;flex-shrink:0}
   .ri-unit{font-size:11px;color:var(--text-muted);margin-bottom:2px}
   .ri-sub{font-size:16px;font-weight:700;color:var(--text)}
@@ -458,50 +462,54 @@ function parseLine(line) {
   if (!l||l.startsWith('//')||l.startsWith('#')) return null;
   const low = l.toLowerCase();
   if (low.startsWith('pokemon')||low.startsWith('trainer')||low.startsWith('energy')||low.startsWith('total')) return null;
-  const m = l.match(/^(\d+)\s+(.+?)\s+([A-Za-z0-9\-]{2,8})\s+(\d{1,4}[a-z]?)$/i);
-  if (!m) return null;
-  const numNorm = String(parseInt(m[4]));
-  return { qty:parseInt(m[1]), nombre:norm(m[2]), set:norm(m[3]), numero:m[4].trim(), numeroNorm:numNorm, display:m[2].trim() };
+  // Tomar tokens: primero=qty, último=numero, penúltimo=set, medio=nombre
+  const tokens = l.trim().split(/\s+/);
+  if (tokens.length < 4) return null;
+  const qty = parseInt(tokens[0]);
+  if (isNaN(qty)) return null;
+  const numero = tokens[tokens.length - 1];
+  if (!/^\d{1,4}[a-z]?$/i.test(numero)) return null;
+  const setCode = tokens[tokens.length - 2];
+  if (!/^[A-Za-z0-9\-]{2,8}$/.test(setCode)) return null;
+  const nombreTokens = tokens.slice(1, tokens.length - 2);
+  if (!nombreTokens.length) return null;
+  const display = nombreTokens.join(' ');
+  const numNorm = String(parseInt(numero));
+  return { qty, nombre:norm(display), set:norm(setCode), numero:numero.trim(), numeroNorm:numNorm, display };
 }
 
-// Precio y stock según idioma seleccionado
+// Busca todas las entradas del inventario para una carta (nombre+set+numero)
+// El inventario nuevo tiene una entrada por carta×variante con stk_esp y stk_eng
 function getStock(c) { return idiomaDefault === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
 function getPrecio(c) { return idiomaDefault === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
 
-// Búsqueda en dos fases:
-// Fase 1 — exacta: nombre + número + set coinciden y hay stock
-// Fase 2 — alternativa: solo nombre coincide y hay stock (distinto set, misma carta jugable)
-// Retorna { grupo, esAlternativa } o null si no hay nada
+// Búsqueda en fases: 1=exacta(nombre+num+set), 2=nombre+num(cualquier set), 3=solo nombre(alternativa)
+// Retorna { grupo, esAlternativa } o null
 function findGrupo(item) {
   const numNorm    = item.numeroNorm || String(parseInt(item.numero));
   const nombreBase = norm(item.nombre);
   const setItem    = item.set;
 
-  // Fase 1: exacta — nombre + número + set
-  const exacta = inventario.filter(c => {
-    const cNombre = norm(c.nombre);
-    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, '');
-    const cSet    = norm(c.set || '');
-    return cNombre === nombreBase &&
-           cNum === numNorm &&
-           cSet === setItem &&
-           getStock(c) > 0;
-  });
-  if (exacta.length > 0) return { grupo: exacta, esAlternativa: false };
+  const conStock = inventario.filter(c => (c.stk_eng||0) > 0 || (c.stk_esp||0) > 0);
 
-  // Fase 2: fallback por número sin importar set
-  const porNumero = inventario.filter(c => {
-    const cNombre = norm(c.nombre);
-    const cNum    = String(parseInt(c.numero)).replace(/\.0$/, '');
-    return cNombre === nombreBase && cNum === numNorm && getStock(c) > 0;
-  });
-  if (porNumero.length > 0) return { grupo: porNumero, esAlternativa: false };
-
-  // Fase 3: alternativa — solo nombre, cualquier set/número con stock
-  const alternativa = inventario.filter(c =>
-    norm(c.nombre) === nombreBase && getStock(c) > 0
+  // Fase 1: nombre + numero + set exactos
+  const f1 = conStock.filter(c =>
+    norm(c.nombre) === nombreBase &&
+    String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm &&
+    norm(c.set||'') === setItem
   );
-  if (alternativa.length > 0) return { grupo: alternativa, esAlternativa: true };
+  if (f1.length) return { grupo: f1, esAlternativa: false };
+
+  // Fase 2: nombre + numero, cualquier set
+  const f2 = conStock.filter(c =>
+    norm(c.nombre) === nombreBase &&
+    String(parseInt(c.numero)).replace(/\.0$/,'') === numNorm
+  );
+  if (f2.length) return { grupo: f2, esAlternativa: false };
+
+  // Fase 3: solo nombre — alternativa de otro set
+  const f3 = conStock.filter(c => norm(c.nombre) === nombreBase);
+  if (f3.length) return { grupo: f3, esAlternativa: true };
 
   return null;
 }
@@ -510,49 +518,57 @@ function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
 function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
 function buildControles(grupo, idx, disp, found) {
-  let html = '';
-  const stockActual = getStock(found);
-  const maxPermitido = Math.min(12, stockActual);
+  let html = '<div style="margin-top:6px">';
 
-  // Selector de idioma (botones ENG / ESP)
-  const tieneEsp = grupo.some(c => c.variante === found.variante && (c.stk_esp || 0) > 0);
-  const tieneEng = grupo.some(c => c.variante === found.variante && (c.stk_eng || 0) > 0);
-  if (tieneEsp && tieneEng) {
-    html += '<div style="display:flex;gap:6px;margin-top:6px;margin-bottom:4px">';
-    html += '<button onclick="cambiarIdioma(' + idx + ',\'ENG\')" id="btn-eng-' + idx + '" style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid ' + (idiomaDefault==='ENG'?'var(--accent)':'var(--border)') + ';background:' + (idiomaDefault==='ENG'?'var(--accent-dim)':'transparent') + ';color:' + (idiomaDefault==='ENG'?'var(--accent)':'var(--text-muted)') + ';cursor:pointer">ENG</button>';
-    html += '<button onclick="cambiarIdioma(' + idx + ',\'ESP\')" id="btn-esp-' + idx + '" style="font-size:11px;padding:2px 10px;border-radius:20px;border:1px solid ' + (idiomaDefault==='ESP'?'var(--accent)':'var(--border)') + ';background:' + (idiomaDefault==='ESP'?'var(--accent-dim)':'transparent') + ';color:' + (idiomaDefault==='ESP'?'var(--accent)':'var(--text-muted)') + ';cursor:pointer">ESP</button>';
-    html += '</div>';
+  // Selector de SET (si hay múltiples sets con stock)
+  const setsUnicos = [...new Map(grupo.map(c => [c.set, c])).values()];
+  const setsConStock = setsUnicos.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0);
+  if (setsConStock.length > 1) {
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu set</div>';
+    html += '<select class="variant-select" id="sel-set-' + idx + '" onchange="cambiarSet(' + idx + ',this.value)" style="margin-bottom:6px">';
+    setsConStock.forEach(c => {
+      html += '<option value="' + c.set + '"' + (c.set === found.set ? ' selected' : '') + '>' + c.set.toUpperCase() + ' ' + c.numero + '</option>';
+    });
+    html += '</select>';
   }
 
-  // Selector de rareza
-  const variantesUnicas = [...new Set(grupo.map(c => c.variante))];
+  // Selector de RAREZA
+  const setsDelFound = grupo.filter(c => c.set === found.set);
+  const variantesUnicas = [...new Set(setsDelFound.map(c => c.variante))];
   if (variantesUnicas.length > 1) {
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;margin-bottom:3px">Elige tu rareza</div>';
-    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)">';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
+    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:6px">';
     variantesUnicas.forEach(v => {
-      const stockV = grupo.filter(c => c.variante === v).reduce((s,c) => s + getStock(c), 0);
-      const precioV = grupo.find(c => c.variante === v);
-      const precio = precioV ? getPrecio(precioV) : 0;
+      const c = setsDelFound.find(x => x.variante === v);
+      const precio = c ? getPrecio(c) : 0;
       html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
     });
     html += '</select>';
-  } else {
-    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px">';
-    if (found.variante !== 'Normal') {
-      html += '<span style="font-size:11px;color:var(--text-muted)">' + found.variante + '</span>';
-    }
+  } else if (found.variante !== 'Normal') {
+    html += '<span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">' + found.variante + '</span>';
   }
 
-  // Botones cantidad
+  // Botones idioma con tachado si no hay stock
+  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+  const engStock = found.stk_eng || 0;
+  const espStock = found.stk_esp || 0;
+  const engClass = 'lang-btn' + (engStock === 0 ? ' agotado' : '');
+  const espClass = 'lang-btn' + (espStock === 0 ? ' agotado' : '');
+  const engActive = idiomaDefault === 'ENG';
+  const espActive = idiomaDefault === 'ESP';
+  html += '<button id="btn-eng-' + idx + '" class="' + engClass + '" onclick="' + (engStock>0?'cambiarIdioma('+idx+',\'ENG\')':'') + '" style="border:1px solid ' + (engActive?'var(--accent)':'var(--border)') + ';background:' + (engActive?'var(--accent-dim)':'transparent') + ';color:' + (engActive?'var(--accent)':'var(--text-muted)') + '">ENG</button>';
+  html += '<button id="btn-esp-' + idx + '" class="' + espClass + '" onclick="' + (espStock>0?'cambiarIdioma('+idx+',\'ESP\')':'') + '" style="border:1px solid ' + (espActive?'var(--accent)':'var(--border)') + ';background:' + (espActive?'var(--accent-dim)':'transparent') + ';color:' + (espActive?'var(--accent)':'var(--text-muted)') + '">ESP</button>';
+
+  // Qty
+  const stockActual = getStock(found);
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
   html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
   html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
   html += '</div>';
 
-  // Mensaje stock
   const msgStock = stockActual >= 12 ? 'Máx. 12 copias por pedido' : 'Solo ' + stockActual + ' disponibles';
   html += '<div class="stock-msg" style="font-size:10px;color:var(--text-muted);margin-top:4px">' + msgStock + '</div>';
+  html += '</div>';
   return html;
 }
 
@@ -578,11 +594,9 @@ async function cotizar() {
 
   for (const item of items) {
     const resultado = findGrupo(item);
-    if (!resultado) {
-      nope.push({...item, sinStock: false}); continue;
-    }
+    if (!resultado) { nope.push(item); continue; }
     const { grupo, esAlternativa } = resultado;
-    const found = grupo.find(c => c.variante === 'Normal') || grupo[0];
+    const found = grupo.find(c => c.variante === 'Normal' && getStock(c) > 0) || grupo.find(c => getStock(c) > 0) || grupo[0];
     const stockFound = getStock(found);
     const disp = Math.min(12, stockFound >= item.qty ? item.qty : stockFound);
     const estado = esAlternativa ? 'alternativa' : (stockFound >= item.qty ? 'ok' : 'parcial');
@@ -598,30 +612,29 @@ async function cotizar() {
     const precio = getPrecio(found);
     const subTotal = disp * precio;
     let badgeHtml = '';
-    if (estado === 'ok') {
-      badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
-    } else if (estado === 'parcial') {
-      badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
-    } else {
-      badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
-    }
-    // Si es alternativa, mostrar aviso de set distinto
+    if (estado === 'ok')          badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
+    else if (estado === 'parcial') badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
+    else                           badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
+
     const altAviso = esAlternativa
-      ? `<div style="font-size:11px;color:var(--blue);margin-top:3px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
+      ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
       : '';
 
     html += `<div class="result-item" id="ri-${idx}">
-      <div class="ri-left">
+      <div class="ri-left" style="flex:1;min-width:0">
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${idiomaDefault}</span></div>
         <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
         ${altAviso}
-        <div style="margin-top:6px">${badgeHtml}</div>
+        <div style="margin-top:4px">${badgeHtml}</div>
         ${buildControles(grupo, idx, disp, found)}
       </div>
-      <div class="ri-right" id="ri-price-${idx}">
-        <div class="ri-unit">${clp(precio)} c/u</div>
-        <div class="ri-sub">${clp(subTotal)}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <button class="ri-remove" onclick="eliminarItem(${idx})" title="Quitar carta">✕</button>
+        <div class="ri-right" id="ri-price-${idx}">
+          <div class="ri-unit">${clp(precio)} c/u</div>
+          <div class="ri-sub">${clp(subTotal)}</div>
+        </div>
       </div>
     </div>`;
   });
@@ -657,6 +670,88 @@ function cambiarQty(idx, delta) {
   qtyEl.style.color = nueva >= max ? 'var(--red)' : 'var(--text)';
   document.getElementById('ri-price-' + idx).innerHTML =
     `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarResumen();
+}
+
+function eliminarItem(idx) {
+  itemsCotizados.splice(idx, 1);
+  // Re-renderizar solo la sección de cotización
+  const cont = document.getElementById('cotizacionResult');
+  if (!cont) return;
+  // Reconstruir lista manteniendo nopes (no disponibles — quedan igual)
+  let html = '';
+  if (itemsCotizados.length) html += '<div class="section-label">Disponibles</div>';
+  itemsCotizados.forEach((entry, i) => {
+    const {item, found, grupo, disp, estado, esAlternativa} = entry;
+    const precio = getPrecio(found);
+    const subTotal = disp * precio;
+    let badgeHtml = '';
+    if (estado === 'ok')           badgeHtml = `<span class="ri-badge badge-ok">En stock</span>`;
+    else if (estado === 'parcial') badgeHtml = `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span>`;
+    else                           badgeHtml = `<span class="ri-badge badge-alt">Versión alternativa disponible</span>`;
+    const altAviso = esAlternativa
+      ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
+      : '';
+    html += `<div class="result-item" id="ri-${i}">
+      <div class="ri-left" style="flex:1;min-width:0">
+        <div class="ri-name">${cap(item.display)}</div>
+        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaDefault}</span></div>
+        <div class="ri-meta" style="margin-top:2px">Pedidas: <strong style="color:var(--text)">${item.qty}</strong> · Disponibles: <strong style="color:var(--green)">${disp}</strong></div>
+        ${altAviso}
+        <div style="margin-top:4px">${badgeHtml}</div>
+        ${buildControles(grupo, i, disp, found)}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
+        <div class="ri-right" id="ri-price-${i}">
+          <div class="ri-unit">${clp(precio)} c/u</div>
+          <div class="ri-sub">${clp(subTotal)}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+  // Preservar nopes y resumen
+  const nopesEl = cont.querySelector('.section-label:last-of-type');
+  const resumenEl = document.getElementById('resumen-cotizacion');
+  const btnCont = cont.querySelector('.cotizar-btn');
+  // Recalcular totales
+  const totalDisp = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
+  const cartasSi  = itemsCotizados.reduce((s,e) => s + e.disp, 0);
+  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi}</strong></div><div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
+  if (itemsCotizados.length > 0) html += `<button class="cotizar-btn" style="margin-top:16px" onclick="mostrarFormPedido()">Continuar con el pedido →</button>`;
+  cont.innerHTML = html;
+  actualizarResumen();
+}
+
+function cambiarSet(idx, setNombre) {
+  const entry = itemsCotizados[idx];
+  const grupoSet = entry.grupo.filter(c => c.set === setNombre);
+  if (!grupoSet.length) return;
+  // Mantener variante si existe en nuevo set, si no tomar Normal o primera disponible
+  const nuevaFound = grupoSet.find(c => c.variante === entry.found.variante && getStock(c) > 0)
+    || grupoSet.find(c => c.variante === 'Normal' && getStock(c) > 0)
+    || grupoSet.find(c => getStock(c) > 0)
+    || grupoSet[0];
+  entry.found = nuevaFound;
+  entry.esAlternativa = false;
+  const max = Math.min(12, getStock(nuevaFound));
+  entry.disp = Math.min(entry.disp, max) || 1;
+  // Reconstruir controles
+  const riEl = document.getElementById('ri-' + idx);
+  if (riEl) {
+    const ctrlEl = riEl.querySelector('[id^="sel-set-"], .stock-msg')?.closest('div[style]') || riEl.querySelector('.ri-left > div:last-child');
+    // Actualizar meta set/numero
+    const metaEl = riEl.querySelector('.ri-meta');
+    if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase() + ' ' + nuevaFound.numero + ' · <span id="ri-rareza-' + idx + '">' + nuevaFound.variante + '</span> · <span id="ri-idioma-' + idx + '">' + idiomaDefault + '</span>';
+  }
+  const precio = getPrecio(nuevaFound);
+  const priceEl = document.getElementById('ri-price-' + idx);
+  if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
+  const qtyEl = document.getElementById('ri-qty-' + idx);
+  if (qtyEl) qtyEl.textContent = entry.disp;
   const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecio(e.found), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
