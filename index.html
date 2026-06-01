@@ -603,6 +603,19 @@ function findGrupo(item) {
   return { grupo: grupoNombre, fase: 3, found: grupoNombre[0] };
 }
 
+function getAvisoIdioma(idx, found, idiomaCard) {
+  const engOk = (found.stk_eng||0) > 0;
+  const espOk = (found.stk_esp||0) > 0;
+  if (engOk && espOk) return ''; // tiene ambos, sin aviso
+  if (!engOk && espOk) return `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ESP — no en ENG</div>`;
+  if (!espOk && engOk) return `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ENG — no en ESP</div>`;
+  return '';
+}
+function actualizarAvisoIdioma(idx, found, idiomaCard) {
+  const el = document.getElementById('ri-aviso-idioma-' + idx);
+  if (el) el.innerHTML = getAvisoIdioma(idx, found, idiomaCard);
+}
+
 function clp(n) { return '$\u00a0'+Math.round(n).toLocaleString('es-CL'); }
 function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
@@ -630,31 +643,41 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
   }
 
   // ── RAREZA selector ────────────────────────────────────────
-  // Si el grupo tiene SIR: mostrar variantes de todo el grupo (EX + SIR + etc)
-  // Si no: filtrar solo por el set+numero del found actual
+  // Construir opciones desde TODO el grupo (todas las cartas con stock),
+  // combinando set+numero+variante para que el usuario vea todo lo disponible.
   const foundSetNorm = norm(found.set||'');
   const foundNumNorm = String(parseInt(found.numero));
-  let mismoSetNum;
-  if (tieneSIRGrupo) {
-    mismoSetNum = grupo;
-  } else {
-    mismoSetNum = grupo.filter(c =>
-      norm(c.set||'') === foundSetNorm &&
-      String(parseInt(c.numero)) === foundNumNorm
-    );
-    if (!mismoSetNum.length) mismoSetNum = grupo;
+  // Candidatos: mismoSetNum primero, luego el resto del grupo
+  const mismoSetNum = grupo.filter(c =>
+    norm(c.set||'') === foundSetNorm &&
+    String(parseInt(c.numero)) === foundNumNorm
+  );
+  const varsMismoSet = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
+  // Si el set actual solo tiene 1 variante con stock, ampliar al grupo completo
+  const poolVariantes = (varsMismoSet.length > 1 || tieneSIRGrupo)
+    ? (tieneSIRGrupo ? grupo : mismoSetNum)
+    : grupo;
+  // Dedup por "SET NUM · Variante" usando la clave set|numero|variante
+  const varOptMap = new Map();
+  for (const c of poolVariantes) {
+    if ((c.stk_eng||0)+(c.stk_esp||0) === 0) continue;
+    const k = norm(c.set||'')+'|'+String(parseInt(c.numero))+'|'+c.variante;
+    if (!varOptMap.has(k)) varOptMap.set(k, c);
   }
-  const variantesUnicas = [...new Set(mismoSetNum.filter(c => (c.stk_eng||0)+(c.stk_esp||0) > 0).map(c => c.variante))];
-  if (variantesUnicas.length > 1) {
+  const varOpts = [...varOptMap.entries()]; // [key, card]
+  const foundVarKey = foundSetNorm+'|'+foundNumNorm+'|'+found.variante;
+  if (varOpts.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
-    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVariante(' + idx + ',this.value)" style="margin-bottom:8px">';
-    variantesUnicas.forEach(v => {
-      const c = mismoSetNum.find(x => x.variante === v && ((x.stk_eng||0)+(x.stk_esp||0) > 0));
-      const precioEng = c ? (c.prc_eng || 0) : 0;
-      const precioEsp = c ? (c.prc_esp || 0) : 0;
-      const engTieneStock = c ? (c.stk_eng||0) > 0 : false;
-      const precio = (idiomaCard === 'ENG' && engTieneStock) ? precioEng : precioEsp || precioEng;
-      html += '<option value="' + v + '"' + (v === found.variante ? ' selected' : '') + '>' + v + (precio > 0 ? ' — ' + clp(precio) : '') + '</option>';
+    html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVarianteKey(' + idx + ',this.value)" style="margin-bottom:8px">';
+    varOpts.forEach(([k, c]) => {
+      const engTieneStock = (c.stk_eng||0) > 0;
+      const precio = (idiomaCard === 'ENG' && engTieneStock) ? (c.prc_eng||0) : (c.prc_esp||0)||(c.prc_eng||0);
+      // Si viene de otro set, mostrar SET NUM · Variante; si es el mismo solo Variante
+      const esOtroSet = norm(c.set||'') !== foundSetNorm || String(parseInt(c.numero)) !== foundNumNorm;
+      const label = esOtroSet
+        ? c.set.toUpperCase()+' '+c.numero+' · '+c.variante+(precio>0?' — '+clp(precio):'')
+        : c.variante+(precio>0?' — '+clp(precio):'');
+      html += '<option value="' + k + '"' + (k === foundVarKey ? ' selected' : '') + '>' + label + '</option>';
     });
     html += '</select>';
   }
@@ -778,17 +801,13 @@ async function cotizar() {
       ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
       : '';
     // Aviso idioma auto-cambiado (pedido en ENG pero solo hay ESP, o viceversa)
-    const avisoIdioma = (idiomaDefault === 'ENG' && entry.idiomaCard === 'ESP')
-      ? `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ESP — no en ENG</div>`
-      : (idiomaDefault === 'ESP' && entry.idiomaCard === 'ENG')
-      ? `<div style="font-size:11px;color:var(--orange);margin-top:2px">⚠ Solo tenemos en ENG — no en ESP</div>`
-      : '';
+    const avisoIdioma = getAvisoIdioma(idx, found, entry.idiomaCard);
 
     html += `<div class="result-item" id="ri-${idx}">
       <div class="ri-left" style="flex:1;min-width:0">
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
-        ${avisoSet}${avisoIdioma}
+        ${avisoSet}<div id="ri-aviso-idioma-${idx}">${avisoIdioma}</div>
         <div style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, idx, disp, found, entry.idiomaCard)}
       </div>
@@ -982,6 +1001,74 @@ function cambiarSet(idx, setNumKey) {
   const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
+  actualizarResumen();
+}
+
+// Nueva función: maneja selección de rareza por clave "set|numero|variante"
+// Usada cuando el selector de rareza muestra opciones de distintos sets
+function cambiarVarianteKey(idx, key) {
+  const [setN, numN, varN] = key.split('|');
+  const entry = itemsCotizados[idx];
+  const nuevaFound = entry.grupo.find(c =>
+    norm(c.set||'') === setN &&
+    String(parseInt(c.numero)) === numN &&
+    c.variante === varN &&
+    ((c.stk_eng||0)+(c.stk_esp||0) > 0)
+  );
+  if (!nuevaFound) return;
+  // Auto-ajustar idioma
+  const engOk = (nuevaFound.stk_eng||0) > 0;
+  const espOk = (nuevaFound.stk_esp||0) > 0;
+  let nuevoIdiomaCard = entry.idiomaCard;
+  if (nuevoIdiomaCard === 'ENG' && !engOk && espOk) nuevoIdiomaCard = 'ESP';
+  if (nuevoIdiomaCard === 'ESP' && !espOk && engOk) nuevoIdiomaCard = 'ENG';
+  entry.idiomaCard = nuevoIdiomaCard;
+  entry.found = nuevaFound;
+  const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
+  entry.disp = Math.max(0, Math.min(entry.disp || 1, max));
+  const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
+  // Actualizar meta
+  const riEl = document.getElementById('ri-' + idx);
+  if (riEl) {
+    const metaEl = riEl.querySelector('.ri-meta');
+    if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase()+' '+nuevaFound.numero+' · <span id="ri-rareza-'+idx+'">'+nuevaFound.variante+'</span> · <span id="ri-idioma-'+idx+'">'+nuevoIdiomaCard+'</span>';
+  }
+  document.getElementById('ri-price-'+idx).innerHTML =
+    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp*precio)}</div>`;
+  const qtyEl = document.getElementById('ri-qty-'+idx);
+  if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
+  // Actualizar botones idioma
+  const btnEng = document.getElementById('btn-eng-'+idx);
+  const btnEsp = document.getElementById('btn-esp-'+idx);
+  if (btnEng) {
+    btnEng.style.borderColor = nuevoIdiomaCard==='ENG'?'var(--accent)':'var(--border)';
+    btnEng.style.color = nuevoIdiomaCard==='ENG'?'var(--accent)':'var(--text-muted)';
+    btnEng.style.background = nuevoIdiomaCard==='ENG'?'var(--accent-dim)':'transparent';
+    btnEng.style.opacity = engOk?'1':'0.35';
+    btnEng.style.textDecoration = engOk?'none':'line-through';
+    if (engOk) btnEng.setAttribute('onclick',`cambiarIdioma(${idx},'ENG')`);
+    else btnEng.removeAttribute('onclick');
+  }
+  if (btnEsp) {
+    btnEsp.style.borderColor = nuevoIdiomaCard==='ESP'?'var(--accent)':'var(--border)';
+    btnEsp.style.color = nuevoIdiomaCard==='ESP'?'var(--accent)':'var(--text-muted)';
+    btnEsp.style.background = nuevoIdiomaCard==='ESP'?'var(--accent-dim)':'transparent';
+    btnEsp.style.opacity = espOk?'1':'0.35';
+    btnEsp.style.textDecoration = espOk?'none':'line-through';
+    if (espOk) btnEsp.setAttribute('onclick',`cambiarIdioma(${idx},'ESP')`);
+    else btnEsp.removeAttribute('onclick');
+  }
+  // Actualizar selector de set si existe
+  const selSet = document.getElementById('sel-set-'+idx);
+  if (selSet) {
+    const newSetKey = norm(nuevaFound.set||'')+'|'+String(parseInt(nuevaFound.numero));
+    [...selSet.options].forEach(o => { o.selected = o.value === newSetKey; });
+  }
+  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarResumen();
 }
 
@@ -1046,6 +1133,7 @@ function cambiarVariante(idx, varNombre) {
   const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarResumen();
 }
 
