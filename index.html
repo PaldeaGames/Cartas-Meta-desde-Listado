@@ -172,6 +172,30 @@
   .qty-btn{width:24px;height:24px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:all 0.15s;flex-shrink:0}
   .qty-btn:hover{border-color:var(--accent);color:var(--accent)}
   .qty-num{font-size:14px;font-weight:600;color:var(--text);min-width:20px;text-align:center}
+
+  /* ── Stock parcial complemento ── */
+  .badge-par-parcial{background:rgba(249,115,22,0.15);color:var(--orange)}
+  .badge-par-casi{background:rgba(255,220,50,0.15);color:#ffd932}
+  .badge-par-full{background:rgba(71,255,178,0.18);color:var(--green)}
+  .comp-opts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .comp-btn{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-soft);cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif}
+  .comp-btn:hover{border-color:var(--blue);color:var(--blue)}
+  .comp-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+  /* ── Agregar carta manual ── */
+  .add-manual-wrap{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
+  .add-manual-toggle{display:flex;align-items:center;gap:8px;background:none;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text-muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;width:100%;text-align:left;transition:all 0.2s}
+  .add-manual-toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .add-manual-panel{display:none;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px}
+  .add-manual-panel.show{display:block}
+  .add-tabs{display:flex;background:var(--surface2);border-radius:6px;padding:3px;margin-bottom:12px;gap:2px}
+  .add-tab{flex:1;padding:6px;text-align:center;font-size:12px;border-radius:4px;cursor:pointer;transition:all 0.15s;color:var(--text-muted);font-weight:500;border:none;background:none;font-family:'DM Sans',sans-serif}
+  .add-tab.active{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}
+  .add-result-list{margin-top:10px;max-height:220px;overflow-y:auto}
+  .add-result-item{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:6px;border:1px solid var(--border);margin-bottom:6px;font-size:13px;gap:8px;background:var(--surface2)}
+  .add-result-item:last-child{margin-bottom:0}
+  .add-btn{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);background:var(--accent-dim);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all 0.15s}
+  .add-btn:hover{background:var(--accent);color:var(--accent-text)}
 </style>
 </head>
 <body>
@@ -243,6 +267,34 @@
           <button onclick="volverACotizacion()" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border-strong);border-radius:20px;color:var(--text-soft);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;padding:5px 12px;transition:all 0.2s;font-family:'DM Sans',sans-serif" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-soft)'">← Editar cotización</button>
         </div>
         <div class="card" id="resumenCompactoContent" style="padding:14px 16px"></div>
+        <!-- Agregar carta manual -->
+        <div class="add-manual-wrap">
+          <button class="add-manual-toggle" onclick="toggleAddManual()">
+            <span style="font-size:16px">＋</span> ¿Se te olvidó una carta? Agrégala aquí
+          </button>
+          <div class="add-manual-panel" id="addManualPanel">
+            <div class="add-tabs">
+              <button class="add-tab active" id="addTabBuscar" onclick="switchAddTab('buscar')">Buscar por nombre</button>
+              <button class="add-tab" id="addTabPtcgl" onclick="switchAddTab('ptcgl')">Formato PTCGL</button>
+            </div>
+            <!-- Tab buscar -->
+            <div id="addPanelBuscar">
+              <div style="display:flex;gap:8px">
+                <input type="text" id="addBuscarInput" placeholder="Ej: Pikachu, Boss's Orders…" style="flex:1;font-size:13px" oninput="buscarCartaManual(this.value)" />
+              </div>
+              <div class="add-result-list" id="addBuscarResult"></div>
+            </div>
+            <!-- Tab ptcgl -->
+            <div id="addPanelPtcgl" style="display:none">
+              <div style="display:flex;gap:8px">
+                <input type="text" id="addPtcglInput" placeholder="Ej: 2 Pikachu EX TWM 45" style="flex:1;font-size:13px" />
+                <button class="cotizar-btn" style="width:auto;padding:8px 14px;margin-top:0;font-size:13px" onclick="agregarCartaPtcgl()">Agregar</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Mismo formato que tu lista de deck: cantidad nombre SET número</div>
+              <div id="addPtcglMsg" style="font-size:12px;margin-top:6px"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 3b: Datos + Entrega en card unificado -->
@@ -462,6 +514,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymkq81nv85-kf3QIbjn
 })();
 let inventario = [];
 let itemsCotizados = [];
+let itemsManuales = [];
 let entregaMode = null;
 let direccionMode = 'domicilio';
 let idiomaDefault = 'ENG'; // siempre inglés por defecto
@@ -700,6 +753,111 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
   return html;
 }
 
+// ── Construye el badge de stock parcial con opciones de complemento ──
+function buildBadgeParcial(entry, idx) {
+  const { item, found, grupo, disp, idiomaCard } = entry;
+  // Calcular total cubierto: stock del set principal + extras ya elegidos
+  const totalComp = entry.complementos ? entry.complementos.reduce((s, c) => s + c.qty, 0) : 0;
+  const totalCubierto = disp + totalComp;
+  const qty = item.qty;
+
+  let badgeClass, badgeLabel;
+  if (totalCubierto >= qty) {
+    badgeClass = 'ri-badge badge-par-full';
+    badgeLabel = `✓ Stock completo: ${totalCubierto} de ${qty}`;
+  } else if (totalCubierto > disp) {
+    badgeClass = 'ri-badge badge-par-casi';
+    badgeLabel = `⬤ Stock parcial: ${totalCubierto} de ${qty}`;
+  } else {
+    badgeClass = 'ri-badge badge-par';
+    badgeLabel = `Stock parcial: ${disp} de ${qty}`;
+  }
+
+  let html = `<span class="ri-badge ${badgeClass}" id="badge-par-${idx}">${badgeLabel}</span>`;
+
+  // Opciones de complemento desde otros sets
+  if (totalCubierto < qty) {
+    const faltante = qty - totalCubierto;
+    const altSets = grupo.filter(c =>
+      (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
+      getStock(c, idiomaCard) > 0 &&
+      c.variante === found.variante
+    );
+    // También buscar con variantes distintas si no hay del mismo tipo
+    const altSetsTotal = altSets.length > 0 ? altSets : grupo.filter(c =>
+      (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
+      getStock(c, idiomaCard) > 0
+    );
+
+    if (altSetsTotal.length > 0) {
+      html += `<div class="comp-opts" id="comp-opts-${idx}">`;
+      html += `<span style="font-size:11px;color:var(--text-muted)">Completar con:</span>`;
+      altSetsTotal.slice(0, 4).forEach((c, ci) => {
+        const stockAlt = getStock(c, idiomaCard);
+        const yaElegido = entry.complementos && entry.complementos.find(x =>
+          norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
+        );
+        const active = yaElegido ? ' active' : '';
+        const pAlt = getPrecio(c, idiomaCard);
+        const label = c.set.toUpperCase() + ' ' + c.numero + (c.variante !== found.variante ? ' · ' + c.variante : '') + ' (' + stockAlt + ' disp.)' + (pAlt > 0 ? ' · ' + clp(pAlt) : '');
+        html += `<button class="comp-btn${active}" onclick="toggleComplemento(${idx}, ${JSON.stringify(norm(c.set))}, ${JSON.stringify(String(parseInt(c.numero)))}, ${JSON.stringify(c.variante)}, ${faltante})">${label}</button>`;
+      });
+      html += `</div>`;
+    }
+  } else {
+    // Ya completo: mostrar sets elegidos como info
+    if (entry.complementos && entry.complementos.length > 0) {
+      html += `<div style="font-size:11px;color:var(--green);margin-top:4px">`;
+      entry.complementos.forEach(c => {
+        html += `+ ${c.qty} de ${c.set.toUpperCase()} ${c.numero} `;
+      });
+      html += `</div>`;
+    }
+  }
+  return html;
+}
+
+function toggleComplemento(idx, setComp, numComp, varComp, faltanteOriginal) {
+  const entry = itemsCotizados[idx];
+  if (!entry.complementos) entry.complementos = [];
+
+  const yaIdx = entry.complementos.findIndex(x =>
+    norm(x.set) === norm(setComp) && String(parseInt(x.numero)) === numComp && x.variante === varComp
+  );
+
+  if (yaIdx >= 0) {
+    // Deseleccionar
+    entry.complementos.splice(yaIdx, 1);
+  } else {
+    // Agregar: cuántas necesitamos todavía
+    const compActual = entry.complementos.reduce((s, c) => s + c.qty, 0);
+    const faltante = Math.max(0, entry.item.qty - entry.disp - compActual);
+    if (faltante === 0) return; // ya completo con otros
+    // Buscar la carta en el inventario
+    const cartaComp = entry.grupo.find(c =>
+      norm(c.set||'') === norm(setComp) && String(parseInt(c.numero)) === numComp && c.variante === varComp
+    );
+    if (!cartaComp) return;
+    const stockDisp = getStock(cartaComp, entry.idiomaCard);
+    const qty = Math.min(faltante, stockDisp);
+    entry.complementos.push({ set: setComp, numero: numComp, variante: varComp, qty, precio: getPrecio(cartaComp, entry.idiomaCard), cartaObj: cartaComp });
+  }
+
+  // Re-renderizar solo el badge y actualizar totales
+  const badgeContainer = document.getElementById('ri-' + idx)?.querySelector('[id^="badge-par-"]')?.parentElement;
+  if (badgeContainer) {
+    badgeContainer.innerHTML = buildBadgeParcial(entry, idx);
+  }
+  actualizarResumen();
+  const nuevoTotal = itemsCotizados.reduce((s, e) => {
+    let sub = e.disp * getPrecioEntry(e);
+    if (e.complementos) e.complementos.forEach(c => sub += c.qty * c.precio);
+    return s + sub;
+  }, 0);
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+}
+
 async function cotizar() {
   const raw = document.getElementById('deckInput').value.trim();
   const errDeck = document.getElementById('err-deck');
@@ -783,16 +941,7 @@ async function cotizar() {
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
     else if (estado === 'parcial' && disp > 0) {
-      badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
-      // ¿Hay otro set del mismo nombre que sí cumple la cantidad completa?
-      const altCompleto = grupo.filter(c =>
-        (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
-        getStock(c) >= item.qty
-      );
-      if (altCompleto.length > 0) {
-        const alt = altCompleto[0];
-        badgesHtml += `<div style="font-size:11px;color:var(--green);margin-top:4px">✓ ${alt.set.toUpperCase()} ${alt.numero} tiene ${getStock(alt)} disponibles y puede completar tu pedido</div>`;
-      }
+      badgesHtml += buildBadgeParcial(entry, idx);
     }
     if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
 
@@ -874,15 +1023,7 @@ function eliminarItem(idx) {
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
     else if (estado === 'parcial' && disp > 0) {
-      badgesHtml += `<span class="ri-badge badge-par">Stock parcial: ${disp} de ${item.qty}</span> `;
-      const altCompleto = grupo.filter(c =>
-        (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
-        getStock(c, entry.idiomaCard) >= item.qty
-      );
-      if (altCompleto.length > 0) {
-        const alt = altCompleto[0];
-        badgesHtml += `<div style="font-size:11px;color:var(--green);margin-top:4px">✓ ${alt.set.toUpperCase()} ${alt.numero} tiene ${getStock(alt, entry.idiomaCard)} disponibles y puede completar tu pedido</div>`;
-      }
+      badgesHtml += buildBadgeParcial(entry, i);
     }
     if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
     const avisoSet = fase === 3
@@ -1249,6 +1390,30 @@ function actualizarResumen() {
         <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(sub)}</strong>
       </div>`;
     }
+    // Complementos de sets alternativos
+    if (e.complementos) {
+      for (const comp of e.complementos) {
+        const subComp = comp.qty * comp.precio;
+        total += subComp;
+        const compLabel = cap(e.item.display) + (comp.variante !== 'Normal' ? ' · ' + comp.variante : '') + ' ' + comp.set.toUpperCase() + ' ' + comp.numero;
+        html += `<div class="summary-line"><span>${compLabel} ${idiomaCard} x${comp.qty} <span style="font-size:10px;color:var(--blue)">complemento</span></span><strong>${clp(subComp)}</strong></div>`;
+        compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-soft)">${compLabel} <span style="font-size:11px;color:var(--blue)">${comp.set.toUpperCase()} · ${idiomaCard} · x${comp.qty} · compl.</span></span>
+          <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(subComp)}</strong>
+        </div>`;
+      }
+    }
+  }
+  // Cartas manuales extras
+  for (const extra of (itemsManuales||[])) {
+    const subE = extra.qty * extra.precio;
+    total += subE;
+    const varLabelE = extra.variante !== 'Normal' ? ` · ${extra.variante}` : '';
+    html += `<div class="summary-line"><span>${cap(extra.display)}${varLabelE} ${extra.idioma} x${extra.qty} <span style="font-size:10px;color:var(--accent)">extra</span></span><strong>${clp(subE)}</strong></div>`;
+    compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text-soft)">${cap(extra.display)}${varLabelE} <span style="font-size:11px;color:var(--accent)">${extra.set.toUpperCase()} · ${extra.idioma} · x${extra.qty} · extra</span></span>
+      <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(subE)}</strong>
+    </div>`;
   }
   compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:15px;padding:10px 0 4px;font-family:'Syne',sans-serif;font-weight:700">
     <span style="color:var(--text-muted)">Total</span><strong style="color:var(--accent)">${clp(total)}</strong>
@@ -1256,6 +1421,82 @@ function actualizarResumen() {
   html += `<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
   const elC = document.getElementById('resumenCompactoContent');
   if (elC) elC.innerHTML = compactoHtml;
+}
+
+// ── Funciones de agregar carta manual ──
+function toggleAddManual() {
+  const panel = document.getElementById('addManualPanel');
+  panel.classList.toggle('show');
+}
+function switchAddTab(tab) {
+  document.getElementById('addTabBuscar').classList.toggle('active', tab==='buscar');
+  document.getElementById('addTabPtcgl').classList.toggle('active', tab==='ptcgl');
+  document.getElementById('addPanelBuscar').style.display = tab==='buscar' ? 'block' : 'none';
+  document.getElementById('addPanelPtcgl').style.display = tab==='ptcgl' ? 'block' : 'none';
+}
+function buscarCartaManual(q) {
+  const el = document.getElementById('addBuscarResult');
+  if (!q || q.length < 2) { el.innerHTML = ''; return; }
+  const qn = norm(q);
+  const inv = dedupInv(inventario);
+  const matches = inv.filter(c => norm(c.nombre).includes(qn) && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
+  // Dedup por nombre+set+numero+variante y mostrar max 8
+  const seen = new Set();
+  const uniq = matches.filter(c => {
+    const k = norm(c.nombre)+'|'+norm(c.set)+'|'+c.numero+'|'+c.variante;
+    if (seen.has(k)) return false; seen.add(k); return true;
+  }).slice(0, 8);
+  if (!uniq.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">Sin resultados.</div>'; return; }
+  el.innerHTML = uniq.map((c, i) => {
+    const eng = (c.stk_eng||0) > 0;
+    const esp = (c.stk_esp||0) > 0;
+    const idioma = eng ? 'ENG' : 'ESP';
+    const precio = eng ? (c.prc_eng||0) : (c.prc_esp||0);
+    const varLabel = c.variante !== 'Normal' ? ' · ' + c.variante : '';
+    return `<div class="add-result-item">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;font-weight:500">${cap(c.nombre)}${varLabel}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${c.set.toUpperCase()} ${c.numero} · ${idioma}${!eng&&esp?' (solo ESP)':''} · ${clp(precio)}</div>
+      </div>
+      <button class="add-btn" onclick="agregarCartaManualDirecta(${JSON.stringify(JSON.stringify(c))}, 1)">+ Agregar</button>
+    </div>`;
+  }).join('');
+}
+function agregarCartaManualDirecta(cartaJson, qty) {
+  const c = JSON.parse(cartaJson);
+  const eng = (c.stk_eng||0) > 0;
+  const idioma = eng ? 'ENG' : 'ESP';
+  const precio = eng ? (c.prc_eng||0) : (c.prc_esp||0);
+  itemsManuales.push({
+    display: c.nombre, nombre: norm(c.nombre), variante: c.variante,
+    set: c.set, numero: c.numero, idioma, precio, qty
+  });
+  actualizarResumen();
+  // Feedback visual
+  const el = document.getElementById('addBuscarResult');
+  el.innerHTML = `<div style="font-size:12px;color:var(--green);padding:6px 0">✓ ${cap(c.nombre)} agregado al pedido</div>` + el.innerHTML;
+  document.getElementById('addBuscarInput').value = '';
+  setTimeout(() => buscarCartaManual(''), 1500);
+}
+function agregarCartaPtcgl() {
+  const raw = document.getElementById('addPtcglInput').value.trim();
+  const msg = document.getElementById('addPtcglMsg');
+  const parsed = parseLine(raw);
+  if (!parsed) { msg.innerHTML = '<span style="color:var(--red)">Formato inválido. Usa: 2 Pikachu EX TWM 45</span>'; return; }
+  const resultado = findGrupo(parsed);
+  if (!resultado) { msg.innerHTML = '<span style="color:var(--red)">Carta no encontrada en el inventario.</span>'; return; }
+  const { found } = resultado;
+  const eng = (found.stk_eng||0) > 0;
+  const idioma = eng ? 'ENG' : 'ESP';
+  const precio = eng ? (found.prc_eng||0) : (found.prc_esp||0);
+  itemsManuales.push({
+    display: parsed.display, nombre: parsed.nombre, variante: found.variante,
+    set: found.set, numero: found.numero, idioma, precio, qty: parsed.qty
+  });
+  actualizarResumen();
+  msg.innerHTML = `<span style="color:var(--green)">✓ ${cap(parsed.display)} (x${parsed.qty}) agregado</span>`;
+  document.getElementById('addPtcglInput').value = '';
+  setTimeout(() => { msg.innerHTML = ''; }, 2000);
 }
 
 function formatRut(el) {
@@ -1312,16 +1553,43 @@ async function submitPedido() {
     }
   }
 
-  const orderItems = itemsCotizados.map(e => ({
-    nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + (e.idiomaCard||idiomaDefault),
-    variante:  e.found.variante,
-    idioma:    e.idiomaCard||idiomaDefault,
-    set:       e.found.set.toUpperCase(),
-    numero:    e.found.numero,
-    cantidad:  e.disp,
-    precio_clp: getPrecioEntry(e),
-    subtotal:  e.disp * getPrecioEntry(e)
-  }));
+  const orderItems = [];
+  for (const e of itemsCotizados) {
+    if (e.disp > 0) orderItems.push({
+      nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + (e.idiomaCard||idiomaDefault),
+      variante:  e.found.variante,
+      idioma:    e.idiomaCard||idiomaDefault,
+      set:       e.found.set.toUpperCase(),
+      numero:    e.found.numero,
+      cantidad:  e.disp,
+      precio_clp: getPrecioEntry(e),
+      subtotal:  e.disp * getPrecioEntry(e)
+    });
+    if (e.complementos) for (const comp of e.complementos) {
+      orderItems.push({
+        nombre:    cap(e.item.display) + ' - ' + comp.variante + ' - ' + (e.idiomaCard||idiomaDefault),
+        variante:  comp.variante,
+        idioma:    e.idiomaCard||idiomaDefault,
+        set:       comp.set.toUpperCase(),
+        numero:    comp.numero,
+        cantidad:  comp.qty,
+        precio_clp: comp.precio,
+        subtotal:  comp.qty * comp.precio
+      });
+    }
+  }
+  for (const extra of (itemsManuales||[])) {
+    orderItems.push({
+      nombre:    cap(extra.display) + ' - ' + extra.variante + ' - ' + extra.idioma,
+      variante:  extra.variante,
+      idioma:    extra.idioma,
+      set:       extra.set.toUpperCase(),
+      numero:    extra.numero,
+      cantidad:  extra.qty,
+      precio_clp: extra.precio,
+      subtotal:  extra.qty * extra.precio
+    });
+  }
 
   const orderData={
     carpeta:'TCG',
