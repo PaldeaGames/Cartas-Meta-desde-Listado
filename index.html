@@ -269,7 +269,7 @@
         <div class="card" id="resumenCompactoContent" style="padding:14px 16px"></div>
         <!-- Agregar carta manual -->
         <div class="add-manual-wrap">
-          <button class="add-manual-toggle" onclick="toggleAddManual()">
+          <button class="add-manual-toggle" onclick="toggleAddManual()" style="border-color:var(--accent);color:var(--accent);background:var(--accent-dim)">
             <span style="font-size:16px">＋</span> ¿Se te olvidó una carta? Agrégala aquí
           </button>
           <div class="add-manual-panel" id="addManualPanel">
@@ -756,99 +756,105 @@ function buildControles(grupo, idx, disp, found, idiomaCard) {
 // ── Construye el badge de stock parcial con opciones de complemento ──
 function buildBadgeParcial(entry, idx) {
   const { item, found, grupo, disp, idiomaCard } = entry;
-  // Calcular total cubierto: stock del set principal + extras ya elegidos
-  const totalComp = entry.complementos ? entry.complementos.reduce((s, c) => s + c.qty, 0) : 0;
+  if (!entry.complementos) entry.complementos = [];
+  const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
   const totalCubierto = disp + totalComp;
   const qty = item.qty;
+  const faltante = qty - totalCubierto;
 
   let badgeClass, badgeLabel;
   if (totalCubierto >= qty) {
     badgeClass = 'ri-badge badge-par-full';
     badgeLabel = `✓ Stock completo: ${totalCubierto} de ${qty}`;
-  } else if (totalCubierto > disp) {
+  } else if (totalComp > 0) {
     badgeClass = 'ri-badge badge-par-casi';
-    badgeLabel = `⬤ Stock parcial: ${totalCubierto} de ${qty}`;
+    badgeLabel = `⬤ ${totalCubierto} de ${qty} — faltan ${faltante}`;
   } else {
     badgeClass = 'ri-badge badge-par';
-    badgeLabel = `Stock parcial: ${disp} de ${qty}`;
+    badgeLabel = `Stock parcial: ${disp} de ${qty} — faltan ${faltante}`;
   }
 
   let html = `<span class="ri-badge ${badgeClass}" id="badge-par-${idx}">${badgeLabel}</span>`;
 
-  // Opciones de complemento desde otros sets
-  if (totalCubierto < qty) {
-    const faltante = qty - totalCubierto;
-    const altSets = grupo.filter(c =>
-      (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
-      getStock(c, idiomaCard) > 0 &&
-      c.variante === found.variante
-    );
-    // También buscar con variantes distintas si no hay del mismo tipo
-    const altSetsTotal = altSets.length > 0 ? altSets : grupo.filter(c =>
-      (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
-      getStock(c, idiomaCard) > 0
-    );
+  // Sets alternativos disponibles (excluye el set principal)
+  const altSets = grupo.filter(c =>
+    (norm(c.set||'') !== norm(found.set||'') || String(parseInt(c.numero)) !== String(parseInt(found.numero))) &&
+    getStock(c, idiomaCard) > 0
+  );
 
-    if (altSetsTotal.length > 0) {
-      html += `<div class="comp-opts" id="comp-opts-${idx}">`;
-      html += `<span style="font-size:11px;color:var(--text-muted)">Completar con:</span>`;
-      altSetsTotal.slice(0, 4).forEach((c, ci) => {
-        const stockAlt = getStock(c, idiomaCard);
-        const yaElegido = entry.complementos && entry.complementos.find(x =>
-          norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
-        );
-        const active = yaElegido ? ' active' : '';
-        const pAlt = getPrecio(c, idiomaCard);
-        const label = c.set.toUpperCase() + ' ' + c.numero + (c.variante !== found.variante ? ' · ' + c.variante : '') + ' (' + stockAlt + ' disp.)' + (pAlt > 0 ? ' · ' + clp(pAlt) : '');
-        html += `<button class="comp-btn${active}" onclick="toggleComplemento(${idx}, ${JSON.stringify(norm(c.set))}, ${JSON.stringify(String(parseInt(c.numero)))}, ${JSON.stringify(c.variante)}, ${faltante})">${label}</button>`;
-      });
+  if (altSets.length > 0) {
+    html += `<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Completar con otro set — necesitas ${faltante} más:</div>`;
+    altSets.slice(0, 4).forEach((c) => {
+      const stockAlt = getStock(c, idiomaCard);
+      const pAlt = getPrecio(c, idiomaCard);
+      const compExistente = entry.complementos.find(x =>
+        norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
+      );
+      const qtyActual = compExistente ? compExistente.qty : 0;
+      const maxEste = Math.min(stockAlt, faltante + qtyActual); // máx que puede aportar este set
+      const varLabel = c.variante !== found.variante ? ` · ${c.variante}` : '';
+      const setKey = norm(c.set)+'|'+String(parseInt(c.numero))+'|'+c.variante;
+
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;">`;
+      html += `<div style="flex:1;min-width:0">`;
+      html += `<div style="font-size:12px;font-weight:500">${c.set.toUpperCase()} ${c.numero}${varLabel}</div>`;
+      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponibles · ${clp(pAlt)} c/u</div>`;
       html += `</div>`;
-    }
-  } else {
-    // Ya completo: mostrar sets elegidos como info
-    if (entry.complementos && entry.complementos.length > 0) {
-      html += `<div style="font-size:11px;color:var(--green);margin-top:4px">`;
-      entry.complementos.forEach(c => {
-        html += `+ ${c.qty} de ${c.set.toUpperCase()} ${c.numero} `;
-      });
+      // Qty picker
+      html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
+      html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+      html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
+      html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
       html += `</div>`;
-    }
+      html += `</div>`;
+    });
   }
+
   return html;
 }
 
-function toggleComplemento(idx, setComp, numComp, varComp, faltanteOriginal) {
+function cambiarComplemento(idx, setKey, delta) {
   const entry = itemsCotizados[idx];
   if (!entry.complementos) entry.complementos = [];
+  const [setN, numN, varN] = setKey.split('|');
 
-  const yaIdx = entry.complementos.findIndex(x =>
-    norm(x.set) === norm(setComp) && String(parseInt(x.numero)) === numComp && x.variante === varComp
+  const cartaComp = entry.grupo.find(c =>
+    norm(c.set||'') === setN && String(parseInt(c.numero)) === numN && c.variante === varN
   );
+  if (!cartaComp) return;
 
-  if (yaIdx >= 0) {
-    // Deseleccionar
-    entry.complementos.splice(yaIdx, 1);
-  } else {
-    // Agregar: cuántas necesitamos todavía
-    const compActual = entry.complementos.reduce((s, c) => s + c.qty, 0);
-    const faltante = Math.max(0, entry.item.qty - entry.disp - compActual);
-    if (faltante === 0) return; // ya completo con otros
-    // Buscar la carta en el inventario
-    const cartaComp = entry.grupo.find(c =>
-      norm(c.set||'') === norm(setComp) && String(parseInt(c.numero)) === numComp && c.variante === varComp
-    );
-    if (!cartaComp) return;
-    const stockDisp = getStock(cartaComp, entry.idiomaCard);
-    const qty = Math.min(faltante, stockDisp);
-    entry.complementos.push({ set: setComp, numero: numComp, variante: varComp, qty, precio: getPrecio(cartaComp, entry.idiomaCard), cartaObj: cartaComp });
+  const stockAlt = getStock(cartaComp, entry.idiomaCard);
+  const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
+  const totalCubierto = entry.disp + totalComp;
+  const faltante = entry.item.qty - totalCubierto;
+
+  const compIdx = entry.complementos.findIndex(x =>
+    norm(x.set) === setN && String(parseInt(x.numero)) === numN && x.variante === varN
+  );
+  const qtyActual = compIdx >= 0 ? entry.complementos[compIdx].qty : 0;
+
+  // Calcular nueva qty: no puede bajar de 0, no puede subir más allá del stock ni más de lo que falta
+  let nueva = qtyActual + delta;
+  if (delta > 0 && faltante <= 0) return; // ya completo
+  nueva = Math.max(0, Math.min(stockAlt, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
+  // Asegurar que no sume más de lo necesario
+  if (delta > 0) nueva = Math.min(nueva, qtyActual + faltante);
+
+  if (nueva === 0 && compIdx >= 0) {
+    entry.complementos.splice(compIdx, 1);
+  } else if (nueva > 0 && compIdx < 0) {
+    entry.complementos.push({ set: setN, numero: numN, variante: varN, qty: nueva, precio: getPrecio(cartaComp, entry.idiomaCard) });
+  } else if (nueva > 0 && compIdx >= 0) {
+    entry.complementos[compIdx].qty = nueva;
   }
 
-  // Re-renderizar solo el badge y actualizar totales
-  const badgeContainer = document.getElementById('ri-' + idx)?.querySelector('[id^="badge-par-"]')?.parentElement;
-  if (badgeContainer) {
-    badgeContainer.innerHTML = buildBadgeParcial(entry, idx);
+  // Re-renderizar el bloque de badges del item
+  const riEl = document.getElementById('ri-' + idx);
+  if (riEl) {
+    const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
+    if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
   }
-  actualizarResumen();
+  // Actualizar total cotización
   const nuevoTotal = itemsCotizados.reduce((s, e) => {
     let sub = e.disp * getPrecioEntry(e);
     if (e.complementos) e.complementos.forEach(c => sub += c.qty * c.precio);
@@ -856,6 +862,7 @@ function toggleComplemento(idx, setComp, numComp, varComp, faltanteOriginal) {
   }, 0);
   const elTotal = document.getElementById('total-cotizacion');
   if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarResumen();
 }
 
 async function cotizar() {
@@ -957,7 +964,7 @@ async function cotizar() {
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
         ${avisoSet}<div id="ri-aviso-idioma-${idx}">${avisoIdioma}</div>
-        <div style="margin-top:4px">${badgesHtml}</div>
+        <div class="badge-wrap-${idx}" style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, idx, disp, found, entry.idiomaCard)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
@@ -1034,7 +1041,7 @@ function eliminarItem(idx) {
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${entry.idiomaCard}</span></div>
         ${avisoSet}
-        <div style="margin-top:4px">${badgesHtml}</div>
+        <div class="badge-wrap-${i}" style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, i, disp, found, entry.idiomaCard)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
@@ -1453,30 +1460,39 @@ function buscarCartaManual(q) {
     const idioma = eng ? 'ENG' : 'ESP';
     const precio = eng ? (c.prc_eng||0) : (c.prc_esp||0);
     const varLabel = c.variante !== 'Normal' ? ' · ' + c.variante : '';
-    return `<div class="add-result-item">
+    return `<div class="add-result-item"
+      data-nombre="${c.nombre.replace(/"/g,'&quot;')}"
+      data-variante="${c.variante}"
+      data-set="${c.set}"
+      data-numero="${c.numero}"
+      data-idioma="${idioma}"
+      data-precio="${precio}"
+    >
       <div style="min-width:0;flex:1">
         <div style="font-size:13px;font-weight:500">${cap(c.nombre)}${varLabel}</div>
         <div style="font-size:11px;color:var(--text-muted)">${c.set.toUpperCase()} ${c.numero} · ${idioma}${!eng&&esp?' (solo ESP)':''} · ${clp(precio)}</div>
       </div>
-      <button class="add-btn" onclick="agregarCartaManualDirecta(${JSON.stringify(JSON.stringify(c))}, 1)">+ Agregar</button>
+      <button class="add-btn" onclick="agregarCartaManualDirecta(this)">+ Agregar</button>
     </div>`;
   }).join('');
 }
-function agregarCartaManualDirecta(cartaJson, qty) {
-  const c = JSON.parse(cartaJson);
-  const eng = (c.stk_eng||0) > 0;
-  const idioma = eng ? 'ENG' : 'ESP';
-  const precio = eng ? (c.prc_eng||0) : (c.prc_esp||0);
+function agregarCartaManualDirecta(btn) {
+  const row = btn.closest('.add-result-item');
+  const nombre = row.dataset.nombre;
+  const variante = row.dataset.variante;
+  const set = row.dataset.set;
+  const numero = row.dataset.numero;
+  const idioma = row.dataset.idioma;
+  const precio = parseFloat(row.dataset.precio) || 0;
   itemsManuales.push({
-    display: c.nombre, nombre: norm(c.nombre), variante: c.variante,
-    set: c.set, numero: c.numero, idioma, precio, qty
+    display: nombre, nombre: norm(nombre), variante,
+    set, numero, idioma, precio, qty: 1
   });
   actualizarResumen();
-  // Feedback visual
   const el = document.getElementById('addBuscarResult');
-  el.innerHTML = `<div style="font-size:12px;color:var(--green);padding:6px 0">✓ ${cap(c.nombre)} agregado al pedido</div>` + el.innerHTML;
+  el.innerHTML = `<div style="font-size:12px;color:var(--green);padding:6px 0">✓ ${cap(nombre)} agregado al pedido</div>` + el.innerHTML;
   document.getElementById('addBuscarInput').value = '';
-  setTimeout(() => buscarCartaManual(''), 1500);
+  setTimeout(() => { document.getElementById('addBuscarResult').innerHTML = ''; }, 2000);
 }
 function agregarCartaPtcgl() {
   const raw = document.getElementById('addPtcglInput').value.trim();
