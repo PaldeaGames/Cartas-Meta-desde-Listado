@@ -968,8 +968,21 @@ function cambiarComplemento(idx, setKey, delta) {
   const riEl = document.getElementById('ri-' + idx);
   if (riEl) {
     const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
-    if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+    if (badgeWrap) {
+      if (entry._editandoComplementos) {
+        editarComplementos(idx); // re-renderiza el panel de edición
+      } else {
+        badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+      }
+    }
   }
+  // Actualizar precio de la tarjeta: principal + complementos
+  const precioP = getPrecioEntry(entry);
+  const subPrincipal = entry.disp * precioP;
+  const subComps = (entry.complementos||[]).reduce((s, c) => s + c.qty * c.precio, 0);
+  const subTotal = subPrincipal + subComps;
+  const priceEl = document.getElementById('ri-price-' + idx);
+  if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precioP)} c/u</div><div class="ri-sub">${clp(subTotal)}</div>`;
   // Actualizar total cotización
   const nuevoTotal = itemsCotizados.reduce((s, e) => {
     let sub = e.disp * getPrecioEntry(e);
@@ -1058,7 +1071,7 @@ async function cotizar() {
   cotizadosTemp.forEach((entry, idx) => {
     const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
     const precio = getPrecioEntry(entry);
-    const subTotal = disp * precio;
+    const subTotal = calcSubEntry(entry);
 
     // Badge: "En stock", "Stock parcial" (solo si disp > 0), SIR badge
     let badgesHtml = '';
@@ -1113,18 +1126,38 @@ async function cotizar() {
   document.getElementById('stepCotizacion').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+// Helper: subtotal de una entry incluyendo complementos
+function calcSubEntry(e) {
+  let sub = e.disp * getPrecioEntry(e);
+  if (e.complementos) e.complementos.forEach(c => sub += c.qty * c.precio);
+  return sub;
+}
+// Helper: total global de todos los items
+function calcTotalGlobal() {
+  return itemsCotizados.reduce((s, e) => s + calcSubEntry(e), 0);
+}
+// Helper: actualizar ri-price de una tarjeta sumando complementos
+function actualizarPrecioTarjeta(idx) {
+  const entry = itemsCotizados[idx];
+  const precio = getPrecioEntry(entry);
+  const sub = calcSubEntry(entry);
+  const priceEl = document.getElementById('ri-price-' + idx);
+  if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
+}
+// Helper: actualizar total-cotizacion
+function actualizarTotalCotizacion() {
+  const elTotal = document.getElementById('total-cotizacion');
+  if (elTotal) elTotal.textContent = clp(calcTotalGlobal());
+}
+
 function cambiarQty(idx, delta) {
   const entry = itemsCotizados[idx];
   const max   = Math.min(12, getStock(entry.found, entry.idiomaCard));
   const nueva = Math.min(max, Math.max(0, entry.disp + delta));
   entry.disp  = nueva;
-  const precio = getPrecio(entry.found, entry.idiomaCard);
-  const sub    = nueva * precio;
-  const qtyEl  = document.getElementById('ri-qty-' + idx);
+  const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) { qtyEl.textContent = nueva; qtyEl.style.color = nueva === 0 ? 'var(--text-muted)' : nueva >= max ? 'var(--red)' : 'var(--text)'; }
-  const priceEl = document.getElementById('ri-price-' + idx);
-  if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
-  // Si es parcial, re-renderizar badge para actualizar contador
+  actualizarPrecioTarjeta(idx);
   if (entry.estado === 'parcial') {
     const riEl = document.getElementById('ri-' + idx);
     if (riEl) {
@@ -1132,13 +1165,7 @@ function cambiarQty(idx, delta) {
       if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
     }
   }
-  const nuevoTotal = itemsCotizados.reduce((s, e) => {
-    let t = e.disp * getPrecioEntry(e);
-    if (e.complementos) e.complementos.forEach(c => t += c.qty * c.precio);
-    return s + t;
-  }, 0);
-  const elTotal = document.getElementById('total-cotizacion');
-  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarTotalCotizacion();
   actualizarResumen();
 }
 
@@ -1153,7 +1180,7 @@ function eliminarItem(idx) {
   itemsCotizados.forEach((entry, i) => {
     const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
     const precio = getPrecioEntry(entry);
-    const subTotal = disp * precio;
+    const subTotal = calcSubEntry(entry);
     let badgesHtml = '';
     if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
     else if (estado === 'parcial' && disp > 0) {
@@ -1185,7 +1212,7 @@ function eliminarItem(idx) {
   const resumenEl = document.getElementById('resumen-cotizacion');
   const btnCont = cont.querySelector('.cotizar-btn');
   // Recalcular totales
-  const totalDisp = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
+  const totalDisp = itemsCotizados.reduce((s, e) => s + calcSubEntry(e), 0);
   const cartasSi  = itemsCotizados.reduce((s,e) => s + e.disp, 0);
   html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi}</strong></div><div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
   const barraEl2 = document.getElementById('barraAcciones');
@@ -1222,9 +1249,6 @@ function cambiarSet(idx, setNumKey) {
     const metaEl = riEl.querySelector('.ri-meta');
     if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase() + ' ' + nuevaFound.numero + ' · <span id="ri-rareza-' + idx + '">' + nuevaFound.variante + '</span> · <span id="ri-idioma-' + idx + '">' + nuevoIdiomaCard + '</span>';
   }
-  const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
-  const priceEl = document.getElementById('ri-price-' + idx);
-  if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) qtyEl.textContent = entry.disp;
   // Actualizar botones idioma
@@ -1273,9 +1297,8 @@ function cambiarSet(idx, setNumKey) {
       if (selVar.previousElementSibling) selVar.previousElementSibling.style.display = 'none';
     }
   }
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
-  const elTotal = document.getElementById('total-cotizacion');
-  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarPrecioTarjeta(idx);
+  actualizarTotalCotizacion();
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarResumen();
 }
@@ -1309,11 +1332,8 @@ function cambiarVarianteKey(idx, key) {
     const metaEl = riEl.querySelector('.ri-meta');
     if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase()+' '+nuevaFound.numero+' · <span id="ri-rareza-'+idx+'">'+nuevaFound.variante+'</span> · <span id="ri-idioma-'+idx+'">'+nuevoIdiomaCard+'</span>';
   }
-  document.getElementById('ri-price-'+idx).innerHTML =
-    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp*precio)}</div>`;
   const qtyEl = document.getElementById('ri-qty-'+idx);
   if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
-  // Actualizar botones idioma
   const btnEng = document.getElementById('btn-eng-'+idx);
   const btnEsp = document.getElementById('btn-esp-'+idx);
   if (btnEng) {
@@ -1334,15 +1354,13 @@ function cambiarVarianteKey(idx, key) {
     if (espOk) btnEsp.setAttribute('onclick',`cambiarIdioma(${idx},'ESP')`);
     else btnEsp.removeAttribute('onclick');
   }
-  // Actualizar selector de set si existe
   const selSet = document.getElementById('sel-set-'+idx);
   if (selSet) {
     const newSetKey = norm(nuevaFound.set||'')+'|'+String(parseInt(nuevaFound.numero));
     [...selSet.options].forEach(o => { o.selected = o.value === newSetKey; });
   }
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
-  const elTotal = document.getElementById('total-cotizacion');
-  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarPrecioTarjeta(idx);
+  actualizarTotalCotizacion();
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarResumen();
 }
@@ -1372,17 +1390,12 @@ function cambiarVariante(idx, varNombre) {
   const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
   entry.disp = Math.min(entry.disp, max);
   if (entry.disp < 0) entry.disp = 0;
-  const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
-  const sub = entry.disp * precio;
-  document.getElementById('ri-price-' + idx).innerHTML =
-    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(sub)}</div>`;
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
   const rarezaEl = document.getElementById('ri-rareza-' + idx);
   if (rarezaEl) rarezaEl.textContent = nuevaFound.variante;
   const idiomaEl = document.getElementById('ri-idioma-' + idx);
   if (idiomaEl) idiomaEl.textContent = nuevoIdiomaCard;
-  // Re-renderizar botones idioma reflejando disponibilidad real
   const btnEng = document.getElementById('btn-eng-' + idx);
   const btnEsp = document.getElementById('btn-esp-' + idx);
   if (btnEng) {
@@ -1405,9 +1418,8 @@ function cambiarVariante(idx, varNombre) {
   }
   const msgEl = document.getElementById('ri-' + idx)?.querySelector('.stock-msg');
   if (msgEl) msgEl.remove();
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
-  const elTotal = document.getElementById('total-cotizacion');
-  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarPrecioTarjeta(idx);
+  actualizarTotalCotizacion();
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarResumen();
 }
@@ -1442,16 +1454,19 @@ function cambiarIdioma(idx, idioma) {
   const max   = Math.min(12, getStock(nuevaFound, idioma));
   entry.disp  = Math.min(entry.disp, max);
   if (entry.disp < 0) entry.disp = 0;
-  const precio = getPrecio(nuevaFound, idioma);
-  document.getElementById('ri-price-' + idx).innerHTML =
-    `<div class="ri-unit">${clp(precio)} c/u</div><div class="ri-sub">${clp(entry.disp * precio)}</div>`;
+  // Recalcular precios de complementos con nuevo idioma
+  if (entry.complementos) entry.complementos.forEach(comp => {
+    const cartaComp = entry.grupo.find(c =>
+      norm(c.set||'') === norm(comp.set) && String(parseInt(c.numero)) === String(parseInt(comp.numero)) && c.variante === comp.variante
+    );
+    if (cartaComp) comp.precio = getPrecio(cartaComp, idioma);
+  });
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) qtyEl.textContent = entry.disp;
   const idiomaEl = document.getElementById('ri-idioma-' + idx);
   if (idiomaEl) idiomaEl.textContent = idioma;
-  const nuevoTotal = itemsCotizados.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
-  const elTotal = document.getElementById('total-cotizacion');
-  if (elTotal) elTotal.textContent = clp(nuevoTotal);
+  actualizarPrecioTarjeta(idx);
+  actualizarTotalCotizacion();
   actualizarResumen();
 }
 
@@ -1654,8 +1669,8 @@ function agregarCartaPtcgl() {
   const precio = idioma === 'ENG' ? (found.prc_eng || 0) : (found.prc_esp || 0);
   // Verificar stock disponible vs lo que ya está en itemsCotizados
   const yaEnPedido = itemsCotizados.filter(e =>
-    norm(e.found.nombre||e.item.display) === norm(found.nombre) &&
-    norm(e.found.set) === norm(found.set) && e.found.numero === found.numero
+    norm(e.item.display) === norm(found.nombre) &&
+    norm(e.found.set) === norm(found.set) && String(parseInt(e.found.numero)) === String(parseInt(found.numero))
   ).reduce((s, e) => s + e.disp, 0);
   const yaEnManuales = itemsManuales.filter(m =>
     norm(m.nombre) === norm(found.nombre) && norm(m.set) === norm(found.set) && m.numero === found.numero
