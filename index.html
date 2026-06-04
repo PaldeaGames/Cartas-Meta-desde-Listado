@@ -720,13 +720,13 @@ function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
   }
   const varOpts = [...varOptMap.entries()]; // [key, card]
   const foundVarKey = foundSetNorm+'|'+foundNumNorm+'|'+found.variante;
-  if (varOpts.length > 1) {
+  // Para cartas parciales, el selector de rareza se suprime (se maneja en buildBadgeParcial)
+  if (!esParcial && varOpts.length > 1) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
     html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVarianteKey(' + idx + ',this.value)" style="margin-bottom:8px">';
     varOpts.forEach(([k, c]) => {
       const engTieneStock = (c.stk_eng||0) > 0;
       const precio = (idiomaCard === 'ENG' && engTieneStock) ? (c.prc_eng||0) : (c.prc_esp||0)||(c.prc_eng||0);
-      // Si viene de otro set, mostrar SET NUM · Variante; si es el mismo solo Variante
       const esOtroSet = norm(c.set||'') !== foundSetNorm || String(parseInt(c.numero)) !== foundNumNorm;
       const label = esOtroSet
         ? c.set.toUpperCase()+' '+c.numero+' · '+c.variante+(precio>0?' — '+clp(precio):'')
@@ -777,11 +777,9 @@ function buildBadgeParcial(entry, idx) {
   }
   let html = `<span class="ri-badge ${badgeClass}">${badgeLabel}</span>`;
 
-  if (faltante <= 0) return html; // ya completo
-
   // Candidatos para complementar:
-  // 1) Mismo nombre, distinto set|numero (otro set)
-  // 2) Mismo set|numero, distinta variante (otra rareza)
+  // 1) Mismo nombre, distinto set|numero (otro set, cualquier rareza)
+  // 2) Mismo set|numero, distinta variante (otra rareza del mismo set)
   const foundSetN = norm(found.set||'');
   const foundNumN = String(parseInt(found.numero));
   const altCandidatos = grupo.filter(c => {
@@ -792,9 +790,28 @@ function buildBadgeParcial(entry, idx) {
     return (esOtroSet || esOtraRareza) && getStock(c, idiomaCard) > 0;
   });
 
+  // Si está completo: mostrar resumen de lo elegido + botón para editar
+  if (faltante <= 0) {
+    if (entry.complementos.length > 0) {
+      html += `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
+      entry.complementos.forEach(comp => {
+        const cSetN = norm(comp.set||'');
+        const cNumN = String(parseInt(comp.numero));
+        const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN;
+        const etiq = esOtraRareza
+          ? `${comp.variante} · ${comp.set.toUpperCase()} ${comp.numero}`
+          : `${comp.set.toUpperCase()} ${comp.numero}${comp.variante !== 'Normal' ? ' · ' + comp.variante : ''}`;
+        html += `<span style="font-size:11px;color:var(--green)">+ ${comp.qty}× ${etiq}</span>`;
+      });
+      html += `<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid var(--border-strong);background:none;color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="editarComplementos(${idx})">Editar →</button>`;
+      html += `</div>`;
+    }
+    return html;
+  }
+
   if (altCandidatos.length > 0) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Completar con — necesitas ${faltante} más:</div>`;
-    altCandidatos.slice(0, 5).forEach((c) => {
+    altCandidatos.slice(0, 6).forEach((c) => {
       const stockAlt = getStock(c, idiomaCard);
       const pAlt = getPrecio(c, idiomaCard);
       const compExistente = entry.complementos.find(x =>
@@ -805,9 +822,11 @@ function buildBadgeParcial(entry, idx) {
       const cSetN = norm(c.set||'');
       const cNumN = String(parseInt(c.numero));
       const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN;
+      // Etiqueta clara: siempre NombreCarta SET NUMERO · Rareza
+      const nombreCarta = cap(item.display);
       const etiqueta = esOtraRareza
-        ? `${c.variante} — mismo set`
-        : `${c.set.toUpperCase()} ${c.numero}${c.variante !== 'Normal' ? ' · ' + c.variante : ''}`;
+        ? `${nombreCarta} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`
+        : `${nombreCarta} ${c.set.toUpperCase()} ${c.numero}${c.variante !== 'Normal' ? ' · ' + c.variante : ''}`;
       const setKey = norm(c.set)+'|'+String(parseInt(c.numero))+'|'+c.variante;
 
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
@@ -816,11 +835,9 @@ function buildBadgeParcial(entry, idx) {
       html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''} · ${clp(pAlt)} c/u</div>`;
       html += `</div>`;
       if (stockAlt === 1) {
-        // Solo 1 unidad → no picker, solo botón toggle
         const yaAgregado = qtyActual > 0;
         html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${setKey}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
       } else {
-        // Picker normal
         html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
         html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
         html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
@@ -832,6 +849,79 @@ function buildBadgeParcial(entry, idx) {
   }
 
   return html;
+}
+
+// Volver a mostrar opciones de complemento para editar aunque ya esté completo
+function editarComplementos(idx) {
+  const entry = itemsCotizados[idx];
+  // Forzar faltante positivo temporalmente para re-mostrar opciones
+  // simplemente reseteamos complementos y re-renderizamos
+  // El usuario puede volver a agregar/quitar como quiera
+  entry._editandoComplementos = true;
+  const riEl = document.getElementById('ri-' + idx);
+  if (!riEl) return;
+  const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
+  if (!badgeWrap) return;
+  // Mostrar modo edición: badge + todas las opciones aunque esté completo
+  const { item, found, grupo, disp, idiomaCard } = entry;
+  const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
+  const totalCubierto = disp + totalComp;
+  const qty = item.qty;
+  const foundSetN = norm(found.set||'');
+  const foundNumN = String(parseInt(found.numero));
+
+  let html = `<span class="ri-badge badge-par-full">✓ ${totalCubierto} de ${qty} — editando</span>`;
+  const altCandidatos = grupo.filter(c => {
+    const cSetN = norm(c.set||'');
+    const cNumN = String(parseInt(c.numero));
+    const esOtroSet = cSetN !== foundSetN || cNumN !== foundNumN;
+    const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN && c.variante !== found.variante;
+    return (esOtroSet || esOtraRareza) && getStock(c, idiomaCard) > 0;
+  });
+  if (altCandidatos.length > 0) {
+    html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Editar complementos:</div>`;
+    altCandidatos.slice(0, 6).forEach((c) => {
+      const stockAlt = getStock(c, idiomaCard);
+      const pAlt = getPrecio(c, idiomaCard);
+      const compExistente = entry.complementos.find(x =>
+        norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
+      );
+      const qtyActual = compExistente ? compExistente.qty : 0;
+      const maxEste = Math.min(stockAlt, qty); // en edición puede hasta qty total
+      const esOtraRareza = norm(c.set||'') === foundSetN && String(parseInt(c.numero)) === foundNumN;
+      const nombreCarta = cap(item.display);
+      const etiqueta = esOtraRareza
+        ? `${nombreCarta} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`
+        : `${nombreCarta} ${c.set.toUpperCase()} ${c.numero}${c.variante !== 'Normal' ? ' · ' + c.variante : ''}`;
+      const setKey = norm(c.set)+'|'+String(parseInt(c.numero))+'|'+c.variante;
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
+      html += `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500">${etiqueta}</div>`;
+      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''} · ${clp(pAlt)} c/u</div></div>`;
+      if (stockAlt === 1) {
+        const yaAgregado = qtyActual > 0;
+        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${setKey}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
+      } else {
+        html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+        html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    });
+  }
+  html += `<button style="margin-top:8px;font-size:11px;padding:4px 12px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="cerrarEdicionComplementos(${idx})">✓ Listo</button>`;
+  badgeWrap.innerHTML = html;
+}
+
+function cerrarEdicionComplementos(idx) {
+  const entry = itemsCotizados[idx];
+  entry._editandoComplementos = false;
+  const riEl = document.getElementById('ri-' + idx);
+  if (!riEl) return;
+  const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
+  if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+  actualizarResumen();
 }
 
 function cambiarComplemento(idx, setKey, delta) {
@@ -854,12 +944,17 @@ function cambiarComplemento(idx, setKey, delta) {
   );
   const qtyActual = compIdx >= 0 ? entry.complementos[compIdx].qty : 0;
 
-  // Calcular nueva qty: no puede bajar de 0, no puede subir más allá del stock ni más de lo que falta
+  // Calcular nueva qty
   let nueva = qtyActual + delta;
-  if (delta > 0 && faltante <= 0) return; // ya completo
-  nueva = Math.max(0, Math.min(stockAlt, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
-  // Asegurar que no sume más de lo necesario
-  if (delta > 0) nueva = Math.min(nueva, qtyActual + faltante);
+  const enEdicion = entry._editandoComplementos;
+  if (delta > 0 && faltante <= 0 && !enEdicion) return; // ya completo y no editando
+  if (enEdicion) {
+    // En edición: puede subir hasta el stock disponible sin límite de faltante
+    nueva = Math.max(0, Math.min(stockAlt, nueva));
+  } else {
+    nueva = Math.max(0, Math.min(stockAlt, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
+    if (delta > 0) nueva = Math.min(nueva, qtyActual + faltante);
+  }
 
   if (nueva === 0 && compIdx >= 0) {
     entry.complementos.splice(compIdx, 1);
@@ -1435,9 +1530,9 @@ function actualizarResumen() {
         const subComp = comp.qty * comp.precio;
         total += subComp;
         const compLabel = cap(e.item.display) + (comp.variante !== 'Normal' ? ' · ' + comp.variante : '') + ' ' + comp.set.toUpperCase() + ' ' + comp.numero;
-        html += `<div class="summary-line"><span>${compLabel} ${idiomaCard} x${comp.qty} <span style="font-size:10px;color:var(--blue)">complemento</span></span><strong>${clp(subComp)}</strong></div>`;
+        html += `<div class="summary-line"><span>${compLabel} ${idiomaCard} x${comp.qty} <span style="font-size:10px;color:var(--blue)">para completar</span></span><strong>${clp(subComp)}</strong></div>`;
         compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--text-soft)">${compLabel} <span style="font-size:11px;color:var(--blue)">${comp.set.toUpperCase()} · ${idiomaCard} · x${comp.qty} · compl.</span></span>
+          <span style="color:var(--text-soft)">${compLabel} <span style="font-size:11px;color:var(--blue)">${comp.set.toUpperCase()} · ${idiomaCard} · x${comp.qty} · para completar</span></span>
           <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(subComp)}</strong>
         </div>`;
       }
@@ -1448,9 +1543,9 @@ function actualizarResumen() {
     const subE = extra.qty * extra.precio;
     total += subE;
     const varLabelE = extra.variante !== 'Normal' ? ` · ${extra.variante}` : '';
-    html += `<div class="summary-line"><span>${cap(extra.display)}${varLabelE} ${extra.idioma} x${extra.qty} <span style="font-size:10px;color:var(--accent)">extra</span></span><strong>${clp(subE)}</strong></div>`;
+    html += `<div class="summary-line"><span>${cap(extra.display)}${varLabelE} ${extra.idioma} x${extra.qty} <span style="font-size:10px;color:var(--accent)">agregada por ti</span></span><strong>${clp(subE)}</strong></div>`;
     compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
-      <span style="color:var(--text-soft)">${cap(extra.display)}${varLabelE} <span style="font-size:11px;color:var(--accent)">${extra.set.toUpperCase()} · ${extra.idioma} · x${extra.qty} · extra</span></span>
+      <span style="color:var(--text-soft)">${cap(extra.display)}${varLabelE} <span style="font-size:11px;color:var(--accent)">${extra.set.toUpperCase()} · ${extra.idioma} · x${extra.qty} · agregada por ti</span></span>
       <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(subE)}</strong>
     </div>`;
   }
