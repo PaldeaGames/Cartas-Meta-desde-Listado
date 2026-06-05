@@ -344,7 +344,7 @@
           <div class="field">
             <label>Correo electrónico <span class="req">*</span></label>
             <input type="email" id="correoCliente" placeholder="Ej: maria@gmail.com" />
-            <div class="field-error" id="err-correo">Ingresa un correo electrónico válido.</div>
+            <div class="field-error" id="err-correo-datos">Ingresa un correo electrónico válido.</div>
             
             <div class="field-error" id="err-usuario">Necesitamos tu usuario para contactarte.</div>
           </div>
@@ -863,7 +863,7 @@ function buildBadgeParcial(entry, idx) {
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="font-size:12px;font-weight:500">${etiqueta}</div>`;
-      const idiomaComp = getStock(c, 'ENG') > 0 ? 'ENG' : 'ESP';
+      const idiomaComp = getStock(c, idiomaCard) > 0 ? idiomaCard : (idiomaCard === 'ENG' ? 'ESP' : 'ENG');
       const soloUn = getStock(c, 'ENG') === 0 || getStock(c, 'ESP') === 0;
       const idiomaLabel = soloUn ? ` · solo ${idiomaComp}` : ` · ${idiomaComp}`;
       html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''}${idiomaLabel} · ${clp(pAlt)} c/u</div>`;
@@ -968,7 +968,9 @@ function cambiarComplemento(idx, setKey, delta) {
   );
   if (!cartaComp) return;
 
-  const stockAlt = getStock(cartaComp, entry.idiomaCard);
+  // Usar el idioma del entry si hay stock, sino el otro
+  const idiomaComp = getStock(cartaComp, entry.idiomaCard) > 0 ? entry.idiomaCard : (entry.idiomaCard === 'ENG' ? 'ESP' : 'ENG');
+  const stockAlt = getStock(cartaComp, idiomaComp);
   const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
   const totalCubierto = entry.disp + totalComp;
   const faltante = entry.item.qty - totalCubierto;
@@ -993,7 +995,7 @@ function cambiarComplemento(idx, setKey, delta) {
   if (nueva === 0 && compIdx >= 0) {
     entry.complementos.splice(compIdx, 1);
   } else if (nueva > 0 && compIdx < 0) {
-    entry.complementos.push({ set: setN, numero: numN, variante: varN, qty: nueva, precio: getPrecio(cartaComp, entry.idiomaCard) });
+    entry.complementos.push({ set: setN, numero: numN, variante: varN, qty: nueva, precio: getPrecio(cartaComp, idiomaComp), idioma: idiomaComp });
   } else if (nueva > 0 && compIdx >= 0) {
     entry.complementos[compIdx].qty = nueva;
   }
@@ -1208,8 +1210,10 @@ function eliminarItem(idx) {
   const entry = itemsCotizados[idx];
   if (!entry) return;
   entry.colapsada = true;
+  entry._dispAntes = entry.disp;
+  entry._compAntes = entry.complementos ? JSON.parse(JSON.stringify(entry.complementos)) : [];
   entry.disp = 0;
-  if (entry.complementos) entry.complementos = [];
+  entry.complementos = [];
   const riEl = document.getElementById('ri-' + idx);
   if (riEl) {
     const nombreCarta = cap(entry.item.display);
@@ -1223,55 +1227,6 @@ function eliminarItem(idx) {
   actualizarResumen();
 }
 
-function eliminarItemLegacy(idx) {
-  itemsCotizados.splice(idx, 1);
-  const cont = document.getElementById('cotizacionResult');
-  if (!cont) return;
-  let html = '';
-  if (itemsCotizados.length) html += '<div class="section-label">Disponibles</div>';
-  itemsCotizados.forEach((entry, i) => {
-    const {item, found, grupo, disp, estado, fase, tieneSIRDisp} = entry;
-    const precio = getPrecioEntry(entry);
-    const subTotal = calcSubEntry(entry);
-    let badgesHtml = '';
-    if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
-    else if (estado === 'parcial' && disp > 0) {
-      badgesHtml += buildBadgeParcial(entry, i);
-    }
-    if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
-    const avisoSet = fase === 3
-      ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">Pediste: ${item.set.toUpperCase()} ${item.numero} → Tenemos: ${found.set.toUpperCase()} ${found.numero}</div>`
-      : '';
-    html += `<div class="result-item" id="ri-${i}">
-      <div class="ri-left" style="flex:1;min-width:0">
-        <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${entry.idiomaCard}</span></div>
-        ${avisoSet}
-        <div class="badge-wrap-${i}" style="margin-top:4px">${badgesHtml}</div>
-        ${buildControles(grupo, i, disp, found, entry.idiomaCard, entry.estado==='parcial')}
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-        <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
-        <div class="ri-right" id="ri-price-${i}">
-          <div class="ri-unit">${clp(precio)} c/u</div>
-          <div class="ri-sub">${clp(subTotal)}</div>
-        </div>
-      </div>
-    </div>`;
-  });
-  // Preservar nopes y resumen
-  const nopesEl = cont.querySelector('.section-label:last-of-type');
-  const resumenEl = document.getElementById('resumen-cotizacion');
-  const btnCont = cont.querySelector('.cotizar-btn');
-  // Recalcular totales
-  const totalDisp = itemsCotizados.reduce((s, e) => s + calcSubEntry(e), 0);
-  const cartasSi  = itemsCotizados.reduce((s,e) => s + e.disp, 0);
-  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi}</strong></div><div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
-  const barraEl2 = document.getElementById('barraAcciones');
-  if (barraEl2) barraEl2.style.display = itemsCotizados.length > 0 ? 'block' : 'none';
-  cont.innerHTML = html;
-  actualizarResumen();
-}
 
 function cambiarSet(idx, setNumKey) {
   const entry = itemsCotizados[idx];
@@ -1600,8 +1555,7 @@ function actualizarResumen() {
     const idiomaCard = (e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP';
     html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
     if (e.disp > 0) {
-      const eIdx = itemsCotizados.indexOf(e);
-    compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;border-radius:4px;padding-left:4px" onclick="scrollACarta(${eIdx})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Ir a esta carta">
+      compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;border-radius:4px;padding-left:4px" onclick="scrollACarta(${itemsCotizados.indexOf(e)})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Ir a esta carta">
         <span style="color:var(--text-soft)">${cap(e.item.display)}${varLabel} <span style="font-size:11px;color:var(--text-muted)">${e.found.set.toUpperCase()} · ${idiomaCard} · x${e.disp}</span></span>
         <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(sub)}</strong>
       </div>`;
@@ -1784,7 +1738,9 @@ function restaurarCarta(i) {
   const entry = itemsCotizados[i];
   if (!entry) return;
   entry.colapsada = false;
-  // Re-renderizar la carta completa
+  // Restaurar estado anterior
+  if (entry._dispAntes !== undefined) entry.disp = entry._dispAntes;
+  if (entry._compAntes !== undefined) entry.complementos = entry._compAntes;
   const riEl = document.getElementById('ri-' + i);
   if (!riEl) return;
   // Disparar re-render completo via eliminarItem rebuild
@@ -1874,9 +1830,11 @@ function val(id){return document.getElementById(id).value.trim()}
 async function submitPedido() {
   let ok=true;
   const nombre=val('nombre'), usuario=val('usuario');
+  const correoClienteVal = (document.getElementById('correoCliente')||{}).value?.trim()||'';
 
   if(!nombre||nombre.split(' ').filter(Boolean).length<2){err('err-nombre',true);ok=false;}else err('err-nombre',false);
   if(!usuario||usuario.length<2){err('err-usuario',true);ok=false;}else err('err-usuario',false);
+  if(!correoClienteVal||!correoClienteVal.includes('@')||!correoClienteVal.includes('.')){err('err-correo-datos',true);ok=false;}else err('err-correo-datos',false);
   if(!entregaMode){err('err-entrega',true);ok=false;}else err('err-entrega',false);
 
   if(entregaMode==='retiro'){
