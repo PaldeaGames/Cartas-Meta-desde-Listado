@@ -1170,10 +1170,10 @@ async function cotizar() {
   const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const cartasSi  = cotizadosTemp.reduce((s,e) => s + e.disp, 0);
   const cartasNo  = nope.reduce((s,d) => s + d.qty, 0);
-  // Total real = qty pedida de disponibles + qty pedida de no disponibles
-  const cartasTotalPedidas = cotizadosTemp.reduce((s,e) => s + e.item.qty, 0) + cartasNo;
+  const cartasTotalDisponibles = cotizadosTemp.reduce((s,e) => s + e.item.qty, 0);
+  const cartasTotalPedidas = cartasTotalDisponibles + cartasNo;
 
-  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong id="resumen-cartas-si">${cartasSi} de ${cartasTotalPedidas}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
+  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong id="resumen-cartas-si">${cartasSi} de ${cartasTotalDisponibles}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong id="resumen-cartas-no">${cartasNo} de ${cartasTotalPedidas} pedidas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
 
   // Mostrar barra sticky de acción
   const barraEl = document.getElementById('barraAcciones');
@@ -1215,10 +1215,11 @@ function cambiarQty(idx, delta) {
   const max = Math.min(12, stockReal); // tope = 12 por política, o el stock si hay menos
   const nueva = Math.min(max, Math.max(0, entry.disp + delta));
   entry.disp = nueva;
-  // Actualizar estado según nueva qty
   const stockTotal = getStock(entry.found, entry.idiomaCard);
   const compQty = (entry.complementos||[]).reduce((s,c)=>s+c.qty,0);
-  entry.estado = (nueva + compQty) >= entry.item.qty ? 'ok' : (stockTotal > 0 ? 'parcial' : 'parcial');
+  const cubierto = nueva + compQty;
+  entry.estado = cubierto >= entry.item.qty ? 'ok' : 'parcial';
+  if (entry.estado === 'ok') entry.complementos = [];
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) {
     qtyEl.textContent = nueva;
@@ -1231,9 +1232,13 @@ function cambiarQty(idx, delta) {
     const btnMenos = document.getElementById('qty-menos-' + idx);
     if (btnMas) { btnMas.style.opacity = nueva >= max ? '0.3' : '1'; btnMas.style.cursor = nueva >= max ? 'not-allowed' : 'pointer'; }
     if (btnMenos) { btnMenos.style.opacity = nueva <= 0 ? '0.3' : '1'; btnMenos.style.cursor = nueva <= 0 ? 'not-allowed' : 'pointer'; }
-    if (entry.estado === 'parcial') {
-      const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
-      if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+    const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
+    if (badgeWrap) {
+      let bh = '';
+      if (entry.estado === 'ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
+      else if (entry.estado === 'parcial' && nueva > 0) bh = buildBadgeParcial(entry, idx);
+      if (entry.grupo.some(c=>c.variante==='SIR'&&((c.stk_eng||0)+(c.stk_esp||0)>0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
+      badgeWrap.innerHTML = bh;
     }
   }
   actualizarPrecioTarjeta(idx);
@@ -1549,8 +1554,8 @@ function actualizarResumen() {
       if (e.colapsada) return s;
       const compQty = (e.complementos||[]).reduce((a,c)=>a+c.qty,0);
       return s + Math.min(e.disp + compQty, e.item.qty);
-    }, 0) + (itemsManuales||[]).reduce((s,e)=>s+e.qty,0);
-    const totalPedidas = itemsCotizados.reduce((s,e)=> e.colapsada ? s : s+e.item.qty, 0);
+    }, 0);
+    const totalPedidas = itemsCotizados.reduce((s,e) => s + e.item.qty, 0);
     elCartasSi.textContent = totalDisponibles + ' de ' + totalPedidas;
   }
 }
@@ -1754,6 +1759,9 @@ function restaurarCarta(i) {
   entry.colapsada = false;
   if (entry._dispAntes !== undefined) entry.disp = entry._dispAntes;
   if (entry._compAntes !== undefined) entry.complementos = entry._compAntes;
+  // Recalcular estado tras restaurar
+  const compQtyR = (entry.complementos||[]).reduce((s,c)=>s+c.qty,0);
+  entry.estado = (entry.disp + compQtyR) >= entry.item.qty ? 'ok' : 'parcial';
   const riEl = document.getElementById('ri-' + i);
   if (!riEl) return;
   const { item, found, grupo, disp, idiomaCard, estado } = entry;
