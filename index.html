@@ -799,15 +799,45 @@ function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
 }
 
 // ── Construye el badge de stock parcial con opciones de complemento ──
+// Cada fuente = set|numero|variante|idioma — todas independientes y acumulables
+function getKeyComp(c, idioma) {
+  return norm(c.set||'') + '|' + String(parseInt(c.numero)) + '|' + c.variante + '|' + idioma;
+}
+
+function getCandidatos(entry) {
+  const { found, grupo, idiomaCard } = entry;
+  const foundSetN = norm(found.set||'');
+  const foundNumN = String(parseInt(found.numero));
+  const candidatos = [];
+  // La carta principal en el idioma alternativo (si tiene stock)
+  const idiomaAlt = idiomaCard === 'ENG' ? 'ESP' : 'ENG';
+  if (getStock(found, idiomaAlt) > 0) {
+    candidatos.push({ c: found, idioma: idiomaAlt, key: getKeyComp(found, idiomaAlt) });
+  }
+  // Otras cartas del grupo (otro set u otra rareza) en cualquier idioma con stock
+  for (const c of grupo) {
+    const cSetN = norm(c.set||'');
+    const cNumN = String(parseInt(c.numero));
+    const esOtroSet = cSetN !== foundSetN || cNumN !== foundNumN;
+    const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN && c.variante !== found.variante;
+    if (!esOtroSet && !esOtraRareza) continue;
+    for (const idioma of ['ENG','ESP']) {
+      if (getStock(c, idioma) > 0) {
+        candidatos.push({ c, idioma, key: getKeyComp(c, idioma) });
+      }
+    }
+  }
+  return candidatos;
+}
+
 function buildBadgeParcial(entry, idx) {
-  const { item, found, grupo, disp, idiomaCard } = entry;
+  const { item, found, disp } = entry;
   if (!entry.complementos) entry.complementos = [];
   const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
   const totalCubierto = disp + totalComp;
   const qty = item.qty;
   const faltante = qty - totalCubierto;
 
-  // Badge contador — color según progreso
   let badgeClass, badgeLabel;
   if (totalCubierto >= qty) {
     badgeClass = 'ri-badge badge-par-full';
@@ -821,31 +851,14 @@ function buildBadgeParcial(entry, idx) {
   }
   let html = `<span class="ri-badge ${badgeClass}">${badgeLabel}</span>`;
 
-  // Candidatos para complementar:
-  // 1) Mismo nombre, distinto set|numero (otro set, cualquier rareza)
-  // 2) Mismo set|numero, distinta variante (otra rareza del mismo set)
-  const foundSetN = norm(found.set||'');
-  const foundNumN = String(parseInt(found.numero));
-  const altCandidatos = grupo.filter(c => {
-    const cSetN = norm(c.set||'');
-    const cNumN = String(parseInt(c.numero));
-    const esOtroSet = cSetN !== foundSetN || cNumN !== foundNumN;
-    const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN && c.variante !== found.variante;
-    return (esOtroSet || esOtraRareza) && getStock(c, idiomaCard) > 0;
-  });
+  const candidatos = getCandidatos(entry);
 
-  // Si está completo: mostrar resumen de lo elegido + botón para editar
   if (faltante <= 0) {
+    // Completo: mostrar resumen + botón editar
     if (entry.complementos.length > 0) {
       html += `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
       entry.complementos.forEach(comp => {
-        const cSetN = norm(comp.set||'');
-        const cNumN = String(parseInt(comp.numero));
-        const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN;
-        const etiq = esOtraRareza
-          ? `${comp.variante} · ${comp.set.toUpperCase()} ${comp.numero}`
-          : `${comp.set.toUpperCase()} ${comp.numero}${comp.variante !== 'Normal' ? ' · ' + comp.variante : ''}`;
-        html += `<span style="font-size:11px;color:var(--green)">+ ${comp.qty}× ${etiq}</span>`;
+        html += `<span style="font-size:11px;color:var(--green)">+ ${comp.qty}× ${comp.variante} ${comp.set.toUpperCase()} ${comp.numero} ${comp.idioma}</span>`;
       });
       html += `<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid var(--border-strong);background:none;color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="editarComplementos(${idx})">Editar →</button>`;
       html += `</div>`;
@@ -853,105 +866,71 @@ function buildBadgeParcial(entry, idx) {
     return html;
   }
 
-  if (altCandidatos.length > 0) {
+  if (candidatos.length > 0) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Completar con — necesitas ${faltante} más:</div>`;
-    altCandidatos.slice(0, 6).forEach((c) => {
-      const stockAlt = getStock(c, idiomaCard);
-      const pAlt = getPrecio(c, idiomaCard);
-      const compExistente = entry.complementos.find(x =>
-        norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
-      );
+    candidatos.slice(0, 8).forEach(({ c, idioma, key }) => {
+      const stockAlt = getStock(c, idioma);
+      const pAlt = getPrecio(c, idioma);
+      const compExistente = entry.complementos.find(x => x.key === key);
       const qtyActual = compExistente ? compExistente.qty : 0;
       const maxEste = Math.min(stockAlt, faltante + qtyActual);
-      const cSetN = norm(c.set||'');
-      const cNumN = String(parseInt(c.numero));
-      const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN;
-      // Etiqueta clara: siempre NombreCarta SET NUMERO · Rareza
-      const nombreCarta = cap(item.display);
-      const etiqueta = esOtraRareza
-        ? `${nombreCarta} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`
-        : `${nombreCarta} ${c.set.toUpperCase()} ${c.numero}${c.variante !== 'Normal' ? ' · ' + c.variante : ''}`;
-      const setKey = norm(c.set)+'|'+String(parseInt(c.numero))+'|'+c.variante;
+      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante} · ${idioma}`;
 
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="font-size:12px;font-weight:500">${etiqueta}</div>`;
-      const idiomaComp = getStock(c, idiomaCard) > 0 ? idiomaCard : (idiomaCard === 'ENG' ? 'ESP' : 'ENG');
-      const soloUn = getStock(c, 'ENG') === 0 || getStock(c, 'ESP') === 0;
-      const idiomaLabel = soloUn ? ` · solo ${idiomaComp}` : ` · ${idiomaComp}`;
-      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''}${idiomaLabel} · ${clp(pAlt)} c/u</div>`;
+      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disp. · ${clp(pAlt)} c/u</div>`;
       html += `</div>`;
       if (stockAlt === 1) {
         const yaAgregado = qtyActual > 0;
-        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${setKey}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
+        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${key}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
       } else {
         html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
         html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
         html += `</div>`;
       }
       html += `</div>`;
     });
   }
-
   return html;
 }
 
-// Volver a mostrar opciones de complemento para editar aunque ya esté completo
 function editarComplementos(idx) {
   const entry = itemsCotizados[idx];
-  // Forzar faltante positivo temporalmente para re-mostrar opciones
-  // simplemente reseteamos complementos y re-renderizamos
-  // El usuario puede volver a agregar/quitar como quiera
   entry._editandoComplementos = true;
   const riEl = document.getElementById('ri-' + idx);
   if (!riEl) return;
   const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
   if (!badgeWrap) return;
-  // Mostrar modo edición: badge + todas las opciones aunque esté completo
-  const { item, found, grupo, disp, idiomaCard } = entry;
+  const { item, disp } = entry;
   const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
   const totalCubierto = disp + totalComp;
   const qty = item.qty;
-  const foundSetN = norm(found.set||'');
-  const foundNumN = String(parseInt(found.numero));
+  const candidatos = getCandidatos(entry);
 
   let html = `<span class="ri-badge badge-par-full">✓ ${totalCubierto} de ${qty} — editando</span>`;
-  const altCandidatos = grupo.filter(c => {
-    const cSetN = norm(c.set||'');
-    const cNumN = String(parseInt(c.numero));
-    const esOtroSet = cSetN !== foundSetN || cNumN !== foundNumN;
-    const esOtraRareza = cSetN === foundSetN && cNumN === foundNumN && c.variante !== found.variante;
-    return (esOtroSet || esOtraRareza) && getStock(c, idiomaCard) > 0;
-  });
-  if (altCandidatos.length > 0) {
+  if (candidatos.length > 0) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Editar complementos:</div>`;
-    altCandidatos.slice(0, 6).forEach((c) => {
-      const stockAlt = getStock(c, idiomaCard);
-      const pAlt = getPrecio(c, idiomaCard);
-      const compExistente = entry.complementos.find(x =>
-        norm(x.set) === norm(c.set) && String(parseInt(x.numero)) === String(parseInt(c.numero)) && x.variante === c.variante
-      );
+    candidatos.slice(0, 8).forEach(({ c, idioma, key }) => {
+      const stockAlt = getStock(c, idioma);
+      const pAlt = getPrecio(c, idioma);
+      const compExistente = entry.complementos.find(x => x.key === key);
       const qtyActual = compExistente ? compExistente.qty : 0;
-      const maxEste = Math.min(stockAlt, qty); // en edición puede hasta qty total
-      const esOtraRareza = norm(c.set||'') === foundSetN && String(parseInt(c.numero)) === foundNumN;
-      const nombreCarta = cap(item.display);
-      const etiqueta = esOtraRareza
-        ? `${nombreCarta} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`
-        : `${nombreCarta} ${c.set.toUpperCase()} ${c.numero}${c.variante !== 'Normal' ? ' · ' + c.variante : ''}`;
-      const setKey = norm(c.set)+'|'+String(parseInt(c.numero))+'|'+c.variante;
+      const maxEste = Math.min(stockAlt, qty);
+      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante} · ${idioma}`;
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500">${etiqueta}</div>`;
-      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''} · ${clp(pAlt)} c/u</div></div>`;
+      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disp. · ${clp(pAlt)} c/u</div></div>`;
       if (stockAlt === 1) {
         const yaAgregado = qtyActual > 0;
-        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${setKey}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
+        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${key}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
       } else {
         html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
         html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${setKey}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
         html += `</div>`;
       }
       html += `</div>`;
@@ -971,34 +950,32 @@ function cerrarEdicionComplementos(idx) {
   actualizarResumen();
 }
 
-function cambiarComplemento(idx, setKey, delta) {
+
+
+function cambiarComplemento(idx, key, delta) {
   const entry = itemsCotizados[idx];
   if (!entry.complementos) entry.complementos = [];
-  const [setN, numN, varN] = setKey.split('|');
+  // key = set|numero|variante|idioma
+  const parts = key.split('|');
+  const setN = parts[0], numN = parts[1], varN = parts[2], idiomaComp = parts[3];
 
   const cartaComp = entry.grupo.find(c =>
     norm(c.set||'') === setN && String(parseInt(c.numero)) === numN && c.variante === varN
   );
   if (!cartaComp) return;
 
-  // Usar el idioma del entry si hay stock, sino el otro
-  const idiomaComp = getStock(cartaComp, entry.idiomaCard) > 0 ? entry.idiomaCard : (entry.idiomaCard === 'ENG' ? 'ESP' : 'ENG');
   const stockAlt = getStock(cartaComp, idiomaComp);
   const totalComp = entry.complementos.reduce((s, c) => s + c.qty, 0);
   const totalCubierto = entry.disp + totalComp;
   const faltante = entry.item.qty - totalCubierto;
 
-  const compIdx = entry.complementos.findIndex(x =>
-    norm(x.set) === setN && String(parseInt(x.numero)) === numN && x.variante === varN
-  );
+  const compIdx = entry.complementos.findIndex(x => x.key === key);
   const qtyActual = compIdx >= 0 ? entry.complementos[compIdx].qty : 0;
 
-  // Calcular nueva qty
   let nueva = qtyActual + delta;
   const enEdicion = entry._editandoComplementos;
-  if (delta > 0 && faltante <= 0 && !enEdicion) return; // ya completo y no editando
+  if (delta > 0 && faltante <= 0 && !enEdicion) return;
   if (enEdicion) {
-    // En edición: puede subir hasta el stock disponible sin límite de faltante
     nueva = Math.max(0, Math.min(stockAlt, nueva));
   } else {
     nueva = Math.max(0, Math.min(stockAlt, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
@@ -1008,7 +985,7 @@ function cambiarComplemento(idx, setKey, delta) {
   if (nueva === 0 && compIdx >= 0) {
     entry.complementos.splice(compIdx, 1);
   } else if (nueva > 0 && compIdx < 0) {
-    entry.complementos.push({ set: setN, numero: numN, variante: varN, qty: nueva, precio: getPrecio(cartaComp, idiomaComp), idioma: idiomaComp });
+    entry.complementos.push({ key, set: setN, numero: numN, variante: varN, qty: nueva, precio: getPrecio(cartaComp, idiomaComp), idioma: idiomaComp });
   } else if (nueva > 0 && compIdx >= 0) {
     entry.complementos[compIdx].qty = nueva;
   }
@@ -1520,15 +1497,23 @@ function mostrarFormPedido() {
 }
 
 function scrollACarta(idx) {
-  // Volver a cotización
   document.getElementById('stepPedido').style.display = 'none';
   document.getElementById('stepCotizacion').style.display = 'block';
-  // Asegurar que la barra de acciones (continuar con pedido) sea visible
   const barra = document.getElementById('barraAcciones');
   if (barra) barra.style.display = 'block';
   setTimeout(() => {
     const el = document.getElementById('ri-' + idx);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Efecto de iluminación breve
+    el.style.transition = 'box-shadow 0.3s, border-color 0.3s';
+    el.style.boxShadow = '0 0 0 3px var(--accent)';
+    el.style.borderColor = 'var(--accent)';
+    setTimeout(() => {
+      el.style.boxShadow = '';
+      el.style.borderColor = '';
+      setTimeout(() => { el.style.transition = ''; }, 300);
+    }, 1200);
   }, 80);
 }
 
