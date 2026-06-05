@@ -719,7 +719,7 @@ function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
 function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
   if (!idiomaCard) idiomaCard = idiomaDefault;
-  let html = '<div style="margin-top:6px">';
+  let html = '<div class="controles-wrap-' + idx + '"><div style="margin-top:6px">';
 
   // ── SET selector — solo si NO tiene SIR, NO es parcial ─────
   // Para parciales el set principal es fijo; el complemento se maneja en buildBadgeParcial
@@ -801,6 +801,7 @@ function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
   html += '<span class="qty-num" id="ri-qty-' + idx + '" style="color:' + qtyColor + '" title="' + topeLabel + '">' + disp + '</span>';
   html += '<button class="qty-btn" id="qty-mas-' + idx + '"' + btnMasStyle + ' onclick="cambiarQty(' + idx + ',1)">+</button>';
   html += '<span style="font-size:10px;color:' + (disp >= topeQty ? 'var(--red)' : 'var(--text-muted)') + ';margin-left:2px">/ ' + topeLabel + '</span>';
+  html += '</div>';
   html += '</div>';
   html += '</div>';
   return html;
@@ -1519,13 +1520,16 @@ function cambiarIdioma(idx, idioma) {
   const stockNuevoId = getStock(entry.found, idioma);
   const maxNuevoId = Math.min(12, stockNuevoId);
   entry.disp = Math.min(Math.max(0, entry.disp), maxNuevoId);
-  const qtyEl = document.getElementById('ri-qty-' + idx);
-  if (qtyEl) {
-    qtyEl.textContent = entry.disp;
-    qtyEl.style.color = entry.disp >= maxNuevoId ? 'var(--red)' : 'var(--text)';
-  }
   const idiomaEl = document.getElementById('ri-idioma-' + idx);
   if (idiomaEl) idiomaEl.textContent = idioma;
+  // Re-renderizar controles completos para actualizar botones +/−, tope label y qty
+  const riElCtrl = document.getElementById('ri-' + idx);
+  if (riElCtrl) {
+    const controlesWrap = riElCtrl.querySelector('.controles-wrap-' + idx);
+    if (controlesWrap) {
+      controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, entry.found, idioma, entry.estado === 'parcial');
+    }
+  }
   // Actualizar estado y badge al cambiar idioma
   const stockIdiomaNew = stockNuevoId;
   entry.estado = stockIdiomaNew >= entry.item.qty ? 'ok' : 'parcial';
