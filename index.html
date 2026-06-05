@@ -32,6 +32,8 @@
   }
   @media(max-width:899px){
     #colLeft,#colRight{display:block}
+    #barraAcciones{position:fixed;bottom:0;left:0;right:0;padding:12px 16px 20px;background:linear-gradient(to bottom,transparent,var(--bg) 35%);z-index:50}
+    #barraAcciones .cotizar-btn{width:100%;margin-top:0}
     .qty-btn{width:32px;height:32px;font-size:16px}
     .qty-num{font-size:16px;min-width:24px}
     .ri-card{padding:12px}
@@ -93,7 +95,7 @@
   /* result items */
   .section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin:14px 0 8px}
   .result-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px}
-  .result-item.unavailable{opacity:0.45}
+  .result-item.unavailable{opacity:0.5;padding:5px 10px !important;margin-bottom:4px !important;display:flex;align-items:center;gap:10px;border-radius:6px !important}
   .ri-left{flex:1;min-width:0;display:block}
   .ri-name{font-size:14px;font-weight:500;line-height:1.3}
   .ri-meta{font-size:11px;color:var(--text-muted);font-family:var(--mono);margin-top:1px}
@@ -1154,8 +1156,22 @@ async function cotizar() {
   });
 
   if (nope.length) {
-    html += '<div class="section-label">No disponibles</div>';
-    for (const d of nope) html += `<div class="result-item unavailable"><div class="ri-left"><div class="ri-name">${cap(d.display)}</div><div class="ri-meta">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</div><span class="ri-badge badge-no">No en inventario</span></div></div>`;
+    const totalNoDisp = nope.reduce((s,d)=>s+d.qty,0);
+    const nopeListHtml = nope.map(d =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--text-muted);flex:1">${cap(d.display)}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${d.set.toUpperCase()} ${d.numero} · x${d.qty}</span>
+      </div>`
+    ).join('');
+    html += `<div style="margin-top:12px">
+      <button onclick="toggleNope(this)" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;border:1px dashed rgba(255,80,80,0.3);background:rgba(255,80,80,0.05);color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;text-align:left;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(255,80,80,0.5)'" onmouseout="this.style.borderColor='rgba(255,80,80,0.3)'">
+        <span>⚠ ${totalNoDisp} carta${totalNoDisp>1?'s':''} no disponible${totalNoDisp>1?'s':''} en tu lista</span>
+        <span style="font-size:10px;opacity:0.6">Ver ▾</span>
+      </button>
+      <div class="nope-list" style="display:none;padding:8px 12px;background:rgba(255,80,80,0.04);border:1px dashed rgba(255,80,80,0.2);border-top:none;border-radius:0 0 8px 8px">
+        ${nopeListHtml}
+      </div>
+    </div>`;
   }
 
   const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
@@ -1516,10 +1532,15 @@ function scrollACarta(idx) {
 
 function volverACotizacion() {
   document.getElementById('stepPedido').style.display='none';
-  document.getElementById('colLeft').style.display='block';
-  document.getElementById('stepCotizacion').style.display='block';document.getElementById('stepCotizacion').classList.remove('oculto');
+  const colLeft = document.getElementById('colLeft');
+  if (colLeft) colLeft.style.display='';
+  document.getElementById('stepCotizacion').style.display='block';
+  document.getElementById('stepCotizacion').classList.remove('oculto');
   const b2=document.getElementById('barraAcciones'); if(b2 && itemsCotizados.length>0) b2.style.display='block';
-  window.scrollTo({top:0,behavior:'smooth'});
+  setTimeout(() => {
+    const el = document.getElementById('stepCotizacion');
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 50);
 }
 
 function volverAInicio() {
@@ -1577,9 +1598,10 @@ function actualizarResumen() {
         const subComp = comp.qty * comp.precio;
         total += subComp;
         const compLabel = cap(e.item.display) + (comp.variante !== 'Normal' ? ' · ' + comp.variante : '') + ' ' + comp.set.toUpperCase() + ' ' + comp.numero;
-        html += `<div class="summary-line"><span>${compLabel} ${idiomaCard} x${comp.qty} <span style="font-size:10px;color:var(--blue)">para completar</span></span><strong>${clp(subComp)}</strong></div>`;
+        const compIdioma = comp.idioma || idiomaCard;
+        html += `<div class="summary-line"><span>${compLabel} ${compIdioma} x${comp.qty} <span style="font-size:10px;color:var(--blue)">para completar</span></span><strong>${clp(subComp)}</strong></div>`;
         compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--text-soft)">${compLabel} <span style="font-size:11px;color:var(--blue)">${comp.set.toUpperCase()} · ${idiomaCard} · x${comp.qty} · para completar</span></span>
+          <span style="color:var(--text-soft)">${compLabel} <span style="font-size:11px;color:var(--blue)">${comp.set.toUpperCase()} · ${compIdioma} · x${comp.qty} · para completar</span></span>
           <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(subComp)}</strong>
         </div>`;
       }
@@ -1717,13 +1739,13 @@ function buscarCartaManual(q) {
           <button class="add-idioma-btn ${idioma==='ENG'?'active':''}" 
             data-idioma-btn="ENG"
             style="font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${eng?'var(--border-strong)':'var(--border)'};background:${idioma==='ENG'?'var(--accent-dim)':'none'};color:${eng?(idioma==='ENG'?'var(--accent)':'var(--text-muted)'):'var(--text-muted)'};${!eng?'text-decoration:line-through;opacity:0.4':'cursor:pointer'};font-family:'DM Sans',sans-serif"
-            onclick="if(${eng?'true':'false'}){this.closest('.add-result-item').dataset.idioma='ENG';this.closest('.add-result-item').dataset.precio='${precioEng}';this.closest('.add-result-item').querySelectorAll('[data-idioma-btn]').forEach(b=>b.style.background='none');this.style.background='var(--accent-dim)';}"
+            onclick="if(${eng?'true':'false'}){var row=this.closest('.add-result-item');row.dataset.idioma='ENG';row.dataset.precio='${precioEng}';row.querySelectorAll('[data-idioma-btn]').forEach(function(b){b.style.background='none';b.style.color='var(--text-muted)';b.style.borderColor='var(--border-strong)'});this.style.background='var(--accent-dim)';this.style.color='var(--accent)';this.style.borderColor='var(--accent)';}"
             ${!eng?'disabled':''}
           >ENG${eng?' · '+clp(precioEng):''}</button>
           <button class="add-idioma-btn ${idioma==='ESP'?'active':''}"
             data-idioma-btn="ESP"
             style="font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${esp?'var(--border-strong)':'var(--border)'};background:${idioma==='ESP'?'var(--accent-dim)':'none'};color:${esp?(idioma==='ESP'?'var(--accent)':'var(--text-muted)'):'var(--text-muted)'};${!esp?'text-decoration:line-through;opacity:0.4':'cursor:pointer'};font-family:'DM Sans',sans-serif"
-            onclick="if(${esp?'true':'false'}){this.closest('.add-result-item').dataset.idioma='ESP';this.closest('.add-result-item').dataset.precio='${precioEsp}';this.closest('.add-result-item').querySelectorAll('[data-idioma-btn]').forEach(b=>b.style.background='none');this.style.background='var(--accent-dim)';}"
+            onclick="if(${esp?'true':'false'}){var row=this.closest('.add-result-item');row.dataset.idioma='ESP';row.dataset.precio='${precioEsp}';row.querySelectorAll('[data-idioma-btn]').forEach(function(b){b.style.background='none';b.style.color='var(--text-muted)';b.style.borderColor='var(--border-strong)'});this.style.background='var(--accent-dim)';this.style.color='var(--accent)';this.style.borderColor='var(--accent)';}"
             ${!esp?'disabled':''}
           >ESP${esp?' · '+clp(precioEsp):''}</button>
         </div>
@@ -1850,16 +1872,22 @@ function toggleTooltip() {
 function limpiarDeck() {
   const ta = document.getElementById('deckInput');
   ta.value = '';
-  ta.style.height = '';  // reset altura al original
+  ta.style.height = '';
   document.getElementById('err-deck').style.display = 'none';
-  // Volver al estado inicial si había resultados
-  if (itemsCotizados.length > 0) {
-    itemsCotizados = [];
-    itemsManuales = [];
-    document.getElementById('stepCotizacion').style.display = 'none';
-    document.getElementById('stepPedido').style.display = 'none';
-  }
+  itemsCotizados = [];
+  itemsManuales = [];
+  document.getElementById('stepCotizacion').style.display = 'none';
+  document.getElementById('stepPedido').style.display = 'none';
+  const barra = document.getElementById('barraAcciones');
+  if (barra) barra.style.display = 'none';
   ta.focus();
+}
+
+function toggleNope(btn) {
+  const list = btn.nextElementSibling;
+  const open = list.style.display === 'block';
+  list.style.display = open ? 'none' : 'block';
+  btn.querySelector('span:last-child').textContent = open ? 'Ver ▾' : 'Ocultar ▴';
 }
 
 function formatRut(el) {
