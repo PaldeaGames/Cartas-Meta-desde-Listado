@@ -32,6 +32,21 @@
   }
   @media(max-width:899px){
     #colLeft,#colRight{display:block}
+    .qty-btn{width:32px;height:32px;font-size:16px}
+    .qty-num{font-size:16px;min-width:24px}
+    .ri-card{padding:12px}
+    .ri-name{font-size:15px}
+    .comp-btn{font-size:13px;padding:6px 14px}
+    .add-manual-toggle{font-size:14px;padding:12px 14px}
+    .add-tab{font-size:13px;padding:8px}
+    .add-btn{font-size:13px;padding:5px 14px}
+  }
+  @media(max-width:480px){
+    .step-header{flex-wrap:wrap;gap:8px}
+    .step-header button{font-size:11px;padding:4px 10px}
+    .ri-price .ri-sub{font-size:15px}
+    .ri-remove{width:28px;height:28px;font-size:13px}
+    .badge-par-full,.badge-par-casi,.ri-badge{font-size:11px;padding:3px 8px}
   }
   .header{padding:48px 0 32px;text-align:center}
   .logo-mark{display:inline-flex;align-items:center;gap:10px;margin-bottom:20px}
@@ -157,12 +172,14 @@
   .otro-pedido-btn{margin-top:20px;background:var(--surface2);border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text-soft);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 20px;cursor:pointer}
 
   .tooltip-wrap{position:relative;display:inline-flex;align-items:center}
-  .tooltip-icon{width:18px;height:18px;border-radius:50%;background:var(--surface2);border:1px solid var(--border-strong);color:var(--text-muted);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'Syne',sans-serif;flex-shrink:0}
-  .tooltip-wrap:hover .tooltip-box{display:block}
-  .tooltip-box{display:none;position:absolute;left:24px;top:-8px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:12px 14px;font-size:12px;color:var(--text-soft);line-height:1.7;z-index:100;width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+  .tooltip-icon{width:18px;height:18px;border-radius:50%;background:rgba(71,184,255,0.15);border:1px solid rgba(71,184,255,0.5);color:#47b8ff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'Syne',sans-serif;flex-shrink:0;user-select:none}
+  .tooltip-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.3)}
+  .tooltip-overlay.show{display:block}
+  .tooltip-box{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:14px 16px;font-size:12px;color:var(--text-soft);line-height:1.7;z-index:1000;width:min(300px,88vw);box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+  .tooltip-box.show{display:block}
+  .tooltip-close{float:right;cursor:pointer;color:var(--text-muted);font-size:16px;margin:-2px -4px 0 8px;line-height:1}
   .tooltip-box code{font-family:var(--mono);color:var(--accent);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:4px}
   .tooltip-box strong{color:var(--text);font-weight:500}
-  @media(max-width:480px){.tooltip-box{left:auto;right:0;top:24px}}
 
   .variant-select{background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;color:var(--text-soft);font-size:12px;padding:4px 6px;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;transition:border-color 0.2s;max-width:150px}
   .variant-select:focus{border-color:var(--accent);color:var(--text)}
@@ -183,7 +200,7 @@
   .comp-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
 
   /* ── Agregar carta manual ── */
-  .add-manual-wrap{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
+  .add-manual-wrap{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;margin-bottom:8px}
   .add-manual-toggle{display:flex;align-items:center;gap:8px;background:none;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text-muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;width:100%;text-align:left;transition:all 0.2s}
   .add-manual-toggle:hover{border-color:var(--accent);color:var(--accent)}
   .add-manual-panel{display:none;margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px}
@@ -227,8 +244,10 @@
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <label style="margin-bottom:0">Pega tu lista de deck</label>
             <div class="tooltip-wrap">
-              <div class="tooltip-icon">i</div>
-              <div class="tooltip-box">
+              <div class="tooltip-icon" onclick="toggleTooltip()">i</div>
+              <div class="tooltip-overlay" id="tooltipOverlay" onclick="toggleTooltip()"></div>
+              <div class="tooltip-box" id="tooltipBox">
+                <span class="tooltip-close" onclick="toggleTooltip()">✕</span>
                 <strong>Formatos aceptados:</strong><br><br>
                 Desde <strong>PTCGL / Pokémon Live:</strong><br>
                 <code>* 4 Boss's Orders PAL 172</code><br><br>
@@ -243,10 +262,13 @@
           </div>
           <textarea id="deckInput" placeholder="4 Chikorita PAL 001&#10;2 Meganium TEF 016&#10;4 Boss's Orders PAL 172&#10;2 Professor's Research SVI 189"></textarea>
           <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📋 Puedes copiar y pegar directo desde PTCGL, Limitless o cualquier app de deck building.</div>
-          <div style="font-size:12px;color:var(--blue);margin-top:6px;background:var(--blue-dim);border:1px solid rgba(71,184,255,0.2);border-radius:6px;padding:7px 10px">🌐 Los resultados se muestran en <strong>inglés (ENG)</strong> por defecto. Puedes cambiar el idioma carta por carta en los resultados.</div>
+          <div style="font-size:12px;color:#ff6b6b;margin-top:6px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.25);border-radius:6px;padding:7px 10px">⚠️ Los resultados se muestran en <strong>inglés (ENG)</strong> por defecto. Puedes cambiar el idioma carta por carta en los resultados.</div>
           <div class="field-error" id="err-deck">Ingresa al menos una carta en formato válido.</div>
         </div>
-        <button class="cotizar-btn" id="btnCotizar" onclick="cotizar()">Ver disponibilidad y precios →</button>
+        <div style="display:flex;gap:8px;margin-top:0">
+          <button class="cotizar-btn" id="btnCotizar" onclick="cotizar()" style="flex:1;margin-top:0">Ver disponibilidad y precios →</button>
+          <button onclick="limpiarDeck()" style="padding:10px 16px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;white-space:nowrap" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-muted)'">🗑 Limpiar</button>
+        </div>
       </div>
     </div>
 
@@ -298,7 +320,7 @@
       </div>
 
       <!-- 3b: Datos + Entrega en card unificado -->
-      <div class="step" id="stepDatos">
+      <div class="step" id="stepDatos" style="margin-top:24px">
         <div class="step-header"><div class="step-num">4</div><div class="step-title">Tus datos y entrega</div></div>
         <div class="card">
 
@@ -318,6 +340,12 @@
                 onblur="document.getElementById('ig-wrap').style.borderColor='var(--border)'" />
             </div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📩 Te contactaremos por este usuario para confirmar y coordinar el pago.</div>
+          </div>
+          <div class="field">
+            <label>Correo electrónico <span class="req">*</span></label>
+            <input type="email" id="correoCliente" placeholder="Ej: maria@gmail.com" />
+            <div class="field-error" id="err-correo">Ingresa un correo electrónico válido.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📬 Lo usaremos para enviarte ofertas y novedades de Paldea Games.</div>
             <div class="field-error" id="err-usuario">Necesitamos tu usuario para contactarte.</div>
           </div>
 
@@ -832,7 +860,10 @@ function buildBadgeParcial(entry, idx) {
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="font-size:12px;font-weight:500">${etiqueta}</div>`;
-      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''} · ${clp(pAlt)} c/u</div>`;
+      const idiomaComp = getStock(c, 'ENG') > 0 ? 'ENG' : 'ESP';
+      const soloUn = getStock(c, 'ENG') === 0 || getStock(c, 'ESP') === 0;
+      const idiomaLabel = soloUn ? ` · solo ${idiomaComp}` : ` · ${idiomaComp}`;
+      html += `<div style="font-size:11px;color:var(--text-muted)">${stockAlt} disponible${stockAlt>1?'s':''}${idiomaLabel} · ${clp(pAlt)} c/u</div>`;
       html += `</div>`;
       if (stockAlt === 1) {
         const yaAgregado = qtyActual > 0;
@@ -1128,6 +1159,7 @@ async function cotizar() {
 
 // Helper: subtotal de una entry incluyendo complementos
 function calcSubEntry(e) {
+  if (e.colapsada) return 0;
   let sub = e.disp * getPrecioEntry(e);
   if (e.complementos) e.complementos.forEach(c => sub += c.qty * c.precio);
   return sub;
@@ -1483,6 +1515,19 @@ function mostrarFormPedido() {
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+function scrollACarta(idx) {
+  // Volver a cotización
+  document.getElementById('stepPedido').style.display = 'none';
+  document.getElementById('stepCotizacion').style.display = 'block';
+  // Asegurar que la barra de acciones (continuar con pedido) sea visible
+  const barra = document.getElementById('barraAcciones');
+  if (barra) barra.style.display = 'block';
+  setTimeout(() => {
+    const el = document.getElementById('ri-' + idx);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 80);
+}
+
 function volverACotizacion() {
   document.getElementById('stepPedido').style.display='none';
   document.getElementById('colLeft').style.display='block';
@@ -1527,6 +1572,7 @@ function actualizarResumen() {
   // Resumen compacto de cartas
   let compactoHtml = '';
   for (const e of itemsCotizados) {
+    if (e.colapsada) continue;
     const precio = getPrecioEntry(e);
     const sub    = e.disp * precio;
     total += sub;
@@ -1534,7 +1580,8 @@ function actualizarResumen() {
     const idiomaCard = (e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP';
     html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
     if (e.disp > 0) {
-      compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">
+      const eIdx = itemsCotizados.indexOf(e);
+    compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;border-radius:4px;padding-left:4px" onclick="scrollACarta(${eIdx})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Ir a esta carta">
         <span style="color:var(--text-soft)">${cap(e.item.display)}${varLabel} <span style="font-size:11px;color:var(--text-muted)">${e.found.set.toUpperCase()} · ${idiomaCard} · x${e.disp}</span></span>
         <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(sub)}</strong>
       </div>`;
@@ -1618,6 +1665,11 @@ function buscarCartaManual(q) {
     const varLabel = c.variante !== 'Normal' ? ' · ' + c.variante : '';
     const dispRestante = stockDisponibleRestante(c, idioma);
     const agotado = dispRestante === 0;
+    // Botones idioma ENG / ESP
+    const engDis = !eng || agotado;
+    const espDis = !esp || agotado;
+    const precioEng = c.prc_eng || 0;
+    const precioEsp = c.prc_esp || 0;
     return `<div class="add-result-item"
       data-nombre="${c.nombre.replace(/"/g,'&quot;')}"
       data-variante="${c.variante}"
@@ -1629,8 +1681,22 @@ function buscarCartaManual(q) {
     >
       <div style="min-width:0;flex:1">
         <div style="font-size:13px;font-weight:500">${cap(c.nombre)}${varLabel}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${c.set.toUpperCase()} ${c.numero} · ${idioma}${!eng&&esp?' (solo ESP)':''} · ${clp(precio)}</div>
-        ${agotado?'<div style="font-size:10px;color:var(--orange)">Ya en tu pedido — sin stock adicional</div>':''}
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:5px">${c.set.toUpperCase()} ${c.numero}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="add-idioma-btn ${idioma==='ENG'?'active':''}" 
+            data-idioma-btn="ENG"
+            style="font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${eng?'var(--border-strong)':'var(--border)'};background:${idioma==='ENG'?'var(--accent-dim)':'none'};color:${eng?(idioma==='ENG'?'var(--accent)':'var(--text-muted)'):'var(--text-muted)'};${!eng?'text-decoration:line-through;opacity:0.4':'cursor:pointer'};font-family:'DM Sans',sans-serif"
+            onclick="if(${eng?'true':'false'}){this.closest('.add-result-item').dataset.idioma='ENG';this.closest('.add-result-item').dataset.precio='${precioEng}';this.closest('.add-result-item').querySelectorAll('[data-idioma-btn]').forEach(b=>b.style.background='none');this.style.background='var(--accent-dim)';}"
+            ${!eng?'disabled':''}
+          >ENG${eng?' · '+clp(precioEng):''}</button>
+          <button class="add-idioma-btn ${idioma==='ESP'?'active':''}"
+            data-idioma-btn="ESP"
+            style="font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${esp?'var(--border-strong)':'var(--border)'};background:${idioma==='ESP'?'var(--accent-dim)':'none'};color:${esp?(idioma==='ESP'?'var(--accent)':'var(--text-muted)'):'var(--text-muted)'};${!esp?'text-decoration:line-through;opacity:0.4':'cursor:pointer'};font-family:'DM Sans',sans-serif"
+            onclick="if(${esp?'true':'false'}){this.closest('.add-result-item').dataset.idioma='ESP';this.closest('.add-result-item').dataset.precio='${precioEsp}';this.closest('.add-result-item').querySelectorAll('[data-idioma-btn]').forEach(b=>b.style.background='none');this.style.background='var(--accent-dim)';}"
+            ${!esp?'disabled':''}
+          >ESP${esp?' · '+clp(precioEsp):''}</button>
+        </div>
+        ${agotado?'<div style="font-size:10px;color:var(--orange);margin-top:3px">Ya en tu pedido — sin stock adicional</div>':''}
       </div>
       <button class="add-btn" onclick="agregarCartaManualDirecta(this)" ${agotado?'disabled style="opacity:0.4;cursor:not-allowed"':''}>+ Agregar</button>
     </div>`;
@@ -1692,6 +1758,76 @@ function agregarCartaPtcgl() {
   msg.innerHTML = `<span style="color:var(--green)">✓ ${cap(parsed.display)} x${qtyAgregar} agregado${aviso}</span>`;
   document.getElementById('addPtcglInput').value = '';
   setTimeout(() => { msg.innerHTML = ''; }, 2500);
+}
+
+function restaurarCarta(i) {
+  const entry = itemsCotizados[i];
+  if (!entry) return;
+  entry.colapsada = false;
+  // Re-renderizar la carta completa
+  const riEl = document.getElementById('ri-' + i);
+  if (!riEl) return;
+  // Disparar re-render completo via eliminarItem rebuild
+  const { item, found, grupo, disp, idiomaCard, estado } = entry;
+  const precio = getPrecioEntry(entry);
+  const subTotal = calcSubEntry(entry);
+  const engOk = (found.stk_eng || 0) > 0;
+  const espOk = (found.stk_esp || 0) > 0;
+  const max = Math.min(12, getStock(found, idiomaCard));
+  const tieneSIRDisp = grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
+  let badgesHtml = '';
+  if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
+  else if (estado === 'parcial' && disp > 0) badgesHtml += buildBadgeParcial(entry, i);
+  if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
+  const avisoSet = '';
+  riEl.innerHTML = `
+    <div class="ri-top">
+      <div class="ri-info">
+        <div class="ri-name">\${cap(item.display)}</div>
+        <div class="ri-meta">
+          <span>\${found.set.toUpperCase()} \${found.numero}</span>
+          <span class="ri-dot">·</span>
+          <span id="ri-rareza-\${i}">\${found.variante}</span>
+          <span class="ri-dot">·</span>
+          <span id="ri-idioma-\${i}">\${idiomaCard}</span>
+        </div>
+      </div>
+      <div id="ri-price-\${i}" class="ri-price">
+        <div class="ri-unit">\${clp(precio)} c/u</div>
+        <div class="ri-sub">\${clp(subTotal)}</div>
+      </div>
+      <button class="ri-remove" onclick="eliminarItem(\${i})">✕</button>
+    </div>
+    \${avisoSet}
+    <div class="badge-wrap-\${i}" style="margin-top:4px">\${badgesHtml}</div>
+    \${buildControles(grupo, i, disp, found, idiomaCard, entry.estado==='parcial')}
+  `;
+  actualizarTotalCotizacion();
+  actualizarResumen();
+}
+
+function toggleTooltip() {
+  const box = document.getElementById('tooltipBox');
+  const overlay = document.getElementById('tooltipOverlay');
+  if (!box || !overlay) return;
+  const show = !box.classList.contains('show');
+  box.classList.toggle('show', show);
+  overlay.classList.toggle('show', show);
+}
+
+function limpiarDeck() {
+  const ta = document.getElementById('deckInput');
+  ta.value = '';
+  ta.style.height = '';  // reset altura al original
+  document.getElementById('err-deck').style.display = 'none';
+  // Volver al estado inicial si había resultados
+  if (itemsCotizados.length > 0) {
+    itemsCotizados = [];
+    itemsManuales = [];
+    document.getElementById('stepCotizacion').style.display = 'none';
+    document.getElementById('stepPedido').style.display = 'none';
+  }
+  ta.focus();
 }
 
 function formatRut(el) {
