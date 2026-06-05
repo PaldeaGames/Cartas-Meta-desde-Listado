@@ -302,8 +302,9 @@
             <!-- Tab buscar -->
             <div id="addPanelBuscar">
               <div style="display:flex;gap:8px">
-                <input type="text" id="addBuscarInput" placeholder="Ej: Pikachu, Boss's Orders…" style="flex:1;font-size:13px" oninput="buscarCartaManual(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();const first=document.querySelector('#addBuscarResult .add-btn:not([disabled])');if(first)first.click();}" />
+                <input type="text" id="addBuscarInput" placeholder="Ej: Pikachu, Boss's Orders, ordenes de jefe…" style="flex:1;font-size:13px" oninput="buscarCartaManual(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();const first=document.querySelector('#addBuscarResult .add-btn:not([disabled])');if(first)first.click();}" />
               </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:5px">🌐 Busca preferentemente en <strong style="color:var(--text-soft)">inglés</strong> para mejores resultados. Puedes intentar en español, pero pueden haber errores de coincidencia.</div>
               <div class="add-result-list" id="addBuscarResult"></div>
             </div>
             <!-- Tab ptcgl -->
@@ -1604,6 +1605,48 @@ function switchAddTab(tab) {
   document.getElementById('addPanelBuscar').style.display = tab==='buscar' ? 'block' : 'none';
   document.getElementById('addPanelPtcgl').style.display = tab==='ptcgl' ? 'block' : 'none';
 }
+// Diccionario de términos en español → inglés para búsqueda de cartas
+const DICT_ES_EN = {
+  // Tipos de carta
+  'ordenes':'orders', 'orden':'orders', 'jefe':'boss', 'jefes':'boss',
+  'investigacion':'research', 'profesora':'professor', 'profesor':'professor',
+  'energia':'energy', 'energía':'energy',
+  'hierba':'grass', 'pasto':'grass', 'planta':'grass',
+  'fuego':'fire', 'agua':'water', 'rayo':'lightning', 'electrico':'lightning', 'electrica':'lightning',
+  'lucha':'fighting', 'psiquico':'psychic', 'psíquico':'psychic',
+  'oscuro':'darkness', 'dark':'darkness', 'siniestro':'darkness',
+  'metalico':'metal', 'metálico':'metal', 'acero':'metal',
+  'dragon':'dragon', 'dragón':'dragon',
+  'incoloro':'colorless', 'normal':'normal',
+  // Acciones y objetos comunes
+  'pelota':'ball', 'ultraball':'ultra ball', 'ultra bola':'ultra ball',
+  'bola':'ball', 'captura':'capture', 'kit':'net', 'red':'net',
+  'interruptor':'switch', 'cambio':'switch',
+  'sello':'stamp', 'injusto':'unfair',
+  'esfera':'orb', 'collar':'collar', 'correa':'leash',
+  'investigador':'researcher', 'investigadora':'researcher',
+  'entrenador':'trainer', 'apoyo':'supporter', 'estadio':'stadium',
+  'herramienta':'tool', 'objeto':'item',
+  'recuperacion':'recovery', 'recuperación':'recovery',
+  'laboratorio':'laboratory', 'laboratorios':'laboratory',
+  'bosque':'forest', 'ciudad':'city', 'torre':'tower',
+  'especial':'special', 'basica':'basic', 'básica':'basic',
+  'doble':'double', 'triple':'triple',
+  'turbo':'turbo', 'hiper':'hyper', 'mega':'mega', 'gran':'great',
+  // Pokémon nombres comunes en español
+  'bulbasaur':'bulbasaur', 'charmander':'charmander', 'squirtle':'squirtle',
+  'pikachu':'pikachu', 'raichu':'raichu', 'mewtwo':'mewtwo', 'mew':'mew',
+  'eevee':'eevee', 'gengar':'gengar', 'lapras':'lapras',
+  'snorlax':'snorlax', 'dragonite':'dragonite', 'charizard':'charizard',
+  'cinderace':'cinderace', 'inteleon':'inteleon', 'rillaboom':'rillaboom',
+};
+
+function traducirBusqueda(q) {
+  const palabras = norm(q).split(/\s+/);
+  const traducidas = palabras.map(p => DICT_ES_EN[p] || p);
+  return traducidas.join(' ');
+}
+
 function stockDisponibleRestante(c, idioma) {
   const stockTotal = idioma === 'ENG' ? (c.stk_eng||0) : (c.stk_esp||0);
   const nomC = norm(c.nombre);
@@ -1623,8 +1666,12 @@ function buscarCartaManual(q) {
   const el = document.getElementById('addBuscarResult');
   if (!q || q.length < 2) { el.innerHTML = ''; return; }
   const qn = norm(q);
+  const qnTrad = traducirBusqueda(q); // versión traducida al inglés
   const inv = dedupInv(inventario);
-  const matches = inv.filter(c => norm(c.nombre).includes(qn) && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
+  const matches = inv.filter(c => {
+    const cn = norm(c.nombre);
+    return (cn.includes(qn) || cn.includes(qnTrad)) && ((c.stk_eng||0)+(c.stk_esp||0) > 0);
+  });
   const seen = new Set();
   const uniq = matches.filter(c => {
     const k = norm(c.nombre)+'|'+norm(c.set)+'|'+c.numero+'|'+c.variante;
