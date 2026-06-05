@@ -1313,6 +1313,22 @@ function cambiarSet(idx, setNumKey) {
   actualizarPrecioTarjeta(idx);
   actualizarTotalCotizacion();
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
+  // Re-renderizar badge (parcial o en stock según nuevo estado)
+  const riEl2 = document.getElementById('ri-' + idx);
+  if (riEl2) {
+    const badgeWrap = riEl2.querySelector('.badge-wrap-' + idx);
+    if (badgeWrap) {
+      let badgesHtml = '';
+      if (entry.estado === 'ok') badgesHtml = '<span class="ri-badge badge-ok">En stock</span>';
+      else if (entry.estado === 'parcial' && entry.disp > 0) badgesHtml = buildBadgeParcial(entry, idx);
+      const tieneSIR = entry.grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
+      if (tieneSIR) badgesHtml += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
+      badgeWrap.innerHTML = badgesHtml;
+    }
+    // Re-renderizar controles para ocultar/mostrar selector rareza según estado
+    const controlesWrap = riEl2.querySelector('.controles-wrap-' + idx);
+    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, nuevaFound, nuevoIdiomaCard, entry.estado === 'parcial');
+  }
   actualizarResumen();
 }
 
@@ -1336,8 +1352,11 @@ function cambiarVarianteKey(idx, key) {
   if (nuevoIdiomaCard === 'ESP' && !espOk && engOk) nuevoIdiomaCard = 'ENG';
   entry.idiomaCard = nuevoIdiomaCard;
   entry.found = nuevaFound;
+  entry.complementos = []; // resetear complementos al cambiar rareza
   const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
-  entry.disp = Math.max(0, Math.min(entry.disp || 1, max));
+  const stockNuevo = getStock(nuevaFound, nuevoIdiomaCard);
+  entry.disp = Math.min(stockNuevo >= entry.item.qty ? entry.item.qty : stockNuevo, 12);
+  entry.estado = stockNuevo >= entry.item.qty ? 'ok' : 'parcial';
   const precio = getPrecio(nuevaFound, nuevoIdiomaCard);
   // Actualizar meta
   const riEl = document.getElementById('ri-' + idx);
