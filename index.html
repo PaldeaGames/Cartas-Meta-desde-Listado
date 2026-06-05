@@ -1173,7 +1173,7 @@ async function cotizar() {
   // Total real = qty pedida de disponibles + qty pedida de no disponibles
   const cartasTotalPedidas = cotizadosTemp.reduce((s,e) => s + e.item.qty, 0) + cartasNo;
 
-  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasTotalPedidas}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
+  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong id="resumen-cartas-si">${cartasSi} de ${cartasTotalPedidas}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
 
   // Mostrar barra sticky de acción
   const barraEl = document.getElementById('barraAcciones');
@@ -1584,6 +1584,16 @@ function actualizarResumen() {
   html += `<div class="summary-line total-line" style="margin-top:8px"><span>Total</span><strong>${clp(total)}</strong></div>`;
   const elC = document.getElementById('resumenCompactoContent');
   if (elC) elC.innerHTML = compactoHtml;
+  // Actualizar contador "Cartas disponibles X de Y" en el resumen de cotización
+  const elCartasSi = document.getElementById('resumen-cartas-si');
+  if (elCartasSi) {
+    const totalDisponibles = itemsCotizados.filter(e=>!e.colapsada).reduce((s,e) => {
+      const compQty = (e.complementos||[]).reduce((a,c)=>a+c.qty,0);
+      return s + e.disp + compQty;
+    }, 0) + (itemsManuales||[]).reduce((s,e)=>s+e.qty,0);
+    const totalPedidas = itemsCotizados.reduce((s,e)=>s+e.item.qty,0);
+    elCartasSi.textContent = totalDisponibles + ' de ' + totalPedidas;
+  }
 }
 
 // ── Funciones de agregar carta manual ──
