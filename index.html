@@ -1508,9 +1508,6 @@ function cambiarIdioma(idx, idioma) {
     btnEsp.style.opacity = espOk ? '1' : '0.35';
     btnEsp.style.textDecoration = espOk ? 'none' : 'line-through';
   }
-  const max   = Math.min(12, getStock(nuevaFound, idioma));
-  entry.disp  = Math.min(entry.disp, max);
-  if (entry.disp < 0) entry.disp = 0;
   // Recalcular precios de complementos con nuevo idioma
   if (entry.complementos) entry.complementos.forEach(comp => {
     const cartaComp = entry.grupo.find(c =>
@@ -1518,10 +1515,10 @@ function cambiarIdioma(idx, idioma) {
     );
     if (cartaComp) comp.precio = getPrecio(cartaComp, idioma);
   });
-  // Recalcular disp con el nuevo idioma
+  // Recalcular disp con el nuevo idioma — único punto de control
   const stockNuevoId = getStock(entry.found, idioma);
   const maxNuevoId = Math.min(12, stockNuevoId);
-  entry.disp = Math.min(entry.disp, maxNuevoId);
+  entry.disp = Math.min(Math.max(0, entry.disp), maxNuevoId);
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) {
     qtyEl.textContent = entry.disp;
