@@ -80,6 +80,11 @@
   .field-error.show{display:block}
   input.error,textarea.error,select.error{border-color:var(--red)}
 
+  /* Instagram CTA post-pedido */
+  .ig-cta-btn{display:flex;flex-direction:column;align-items:center;gap:4px;margin:20px auto 14px;padding:16px 28px;border-radius:16px;background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;font-family:'Syne',sans-serif;font-size:18px;font-weight:700;text-decoration:none;letter-spacing:0.02em;box-shadow:0 4px 24px rgba(220,39,67,0.35);transition:transform 0.15s,box-shadow 0.15s;max-width:320px;text-align:center}
+  .ig-cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(220,39,67,0.5)}
+  .ig-cta-btn svg{margin-bottom:2px}
+
   /* Instagram wrap */
   .ig-wrap{display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;transition:border-color 0.2s}
   .ig-wrap:focus-within{border-color:var(--accent)}
@@ -536,9 +541,13 @@
     <div class="success-icon">⚡</div>
     <h2>¡Pedido recibido!</h2>
     <p>Te contactaremos pronto por Instagram para coordinar el pago y la entrega.</p>
-    <p style="margin-top:8px;font-size:13px;color:var(--text-muted)">Nos contactaremos contigo pronto 👌</p>
     <div class="success-order" id="successOrder"></div>
-    <button class="otro-pedido-btn" onclick="location.reload()">Hacer otro pedido</button>
+    <a href="https://www.instagram.com/paldea.games" target="_blank" rel="noopener noreferrer" class="ig-cta-btn">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+      Síguenos en Instagram
+      <span style="font-size:11px;opacity:0.8;display:block;margin-top:2px">@paldea.games · ¡No te pierdas los drops!</span>
+    </a>
+    <button class="otro-pedido-btn" onclick="location.reload()">Hacer otro pedido →</button>
   </div>
 </div>
 
@@ -1004,16 +1013,12 @@ function cambiarComplemento(idx, key, delta) {
     entry.complementos[compIdx].qty = nueva;
   }
 
-  // Re-renderizar el bloque de badges del item
   const riEl = document.getElementById('ri-' + idx);
   if (riEl) {
-    const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
-    if (badgeWrap) {
-      if (entry._editandoComplementos) {
-        editarComplementos(idx); // re-renderiza el panel de edición
-      } else {
-        badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
-      }
+    if (entry._editandoComplementos) {
+      editarComplementos(idx);
+    } else {
+      sincronizarZonaParcial(riEl, idx, entry);
     }
   }
   // Actualizar precio de la tarjeta: principal + complementos
@@ -1130,21 +1135,25 @@ async function cotizar() {
     // Aviso idioma auto-cambiado (pedido en ENG pero solo hay ESP, o viceversa)
     const avisoIdioma = getAvisoIdioma(idx, found, entry.idiomaCard);
 
-    html += `<div class="result-item" id="ri-${idx}">
-      <div class="ri-left" style="flex:1;min-width:0">
-        <div class="ri-name">${cap(item.display)}</div>
-        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
-        ${avisoSet}<div id="ri-aviso-idioma-${idx}">${avisoIdioma}</div>
-        <div class="badge-wrap-${idx}" style="margin-top:4px">${badgesHtml}</div>
-        ${buildControles(grupo, idx, disp, found, entry.idiomaCard, estado==='parcial')}
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-        <button class="ri-remove" onclick="eliminarItem(${idx})" title="Quitar carta">✕</button>
-        <div class="ri-right" id="ri-price-${idx}">
-          <div class="ri-unit">${clp(precio)} c/u</div>
-          <div class="ri-sub">${clp(subTotal)}</div>
+    const tieneParcial = estado === 'parcial';
+    html += `<div class="result-item" id="ri-${idx}" style="flex-direction:column;gap:0;padding:0">
+      <div style="display:flex;align-items:flex-start;gap:8px;padding:14px 14px 10px">
+        <div class="ri-left" style="flex:1;min-width:0">
+          <div class="ri-name">${cap(item.display)}</div>
+          <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
+          ${avisoSet}<div id="ri-aviso-idioma-${idx}">${avisoIdioma}</div>
+          <div class="badge-wrap-${idx}" style="margin-top:4px">${tieneParcial?'':badgesHtml}</div>
+          ${buildControles(grupo, idx, disp, found, entry.idiomaCard, false)}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <button class="ri-remove" onclick="eliminarItem(${idx})" title="Quitar carta">✕</button>
+          <div class="ri-right" id="ri-price-${idx}">
+            <div class="ri-unit">${clp(precio)} c/u</div>
+            <div class="ri-sub">${clp(subTotal)}</div>
+          </div>
         </div>
       </div>
+      ${tieneParcial ? `<div style="border-top:1px solid var(--border);padding:10px 14px 14px"><div class="badge-wrap-${idx}">${badgesHtml}</div></div>` : ''}
     </div>`;
   });
 
@@ -1209,6 +1218,21 @@ function actualizarTotalCotizacion() {
   if (elTotal) elTotal.textContent = clp(calcTotalGlobal());
 }
 
+function sincronizarZonaParcial(riEl, idx, entry) {
+  let zona = riEl.querySelector('.zona-parcial-'+idx);
+  if (entry.estado === 'parcial') {
+    if (!zona) {
+      zona = document.createElement('div');
+      zona.className = 'zona-parcial-'+idx;
+      zona.style.cssText = 'border-top:1px solid var(--border);padding:10px 14px 14px';
+      riEl.appendChild(zona);
+    }
+    zona.innerHTML = '<div class="badge-wrap-'+idx+'">'+buildBadgeParcial(entry, idx)+'</div>';
+  } else {
+    if (zona) zona.remove();
+  }
+}
+
 function cambiarQty(idx, delta) {
   const entry = itemsCotizados[idx];
   const stockReal = getStock(entry.found, entry.idiomaCard);
@@ -1232,14 +1256,13 @@ function cambiarQty(idx, delta) {
     const btnMenos = document.getElementById('qty-menos-' + idx);
     if (btnMas) { btnMas.style.opacity = nueva >= max ? '0.3' : '1'; btnMas.style.cursor = nueva >= max ? 'not-allowed' : 'pointer'; }
     if (btnMenos) { btnMenos.style.opacity = nueva <= 0 ? '0.3' : '1'; btnMenos.style.cursor = nueva <= 0 ? 'not-allowed' : 'pointer'; }
-    const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
-    if (badgeWrap) {
-      let bh = '';
-      if (entry.estado === 'ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
-      else if (entry.estado === 'parcial' && nueva > 0) bh = buildBadgeParcial(entry, idx);
+    const bw = riEl.querySelector('.badge-wrap-'+idx);
+    if (bw && entry.estado==='ok') {
+      let bh = '<span class="ri-badge badge-ok">En stock</span>';
       if (entry.grupo.some(c=>c.variante==='SIR'&&((c.stk_eng||0)+(c.stk_esp||0)>0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
-      badgeWrap.innerHTML = bh;
+      bw.innerHTML = bh;
     }
+    sincronizarZonaParcial(riEl, idx, entry);
   }
   actualizarPrecioTarjeta(idx);
   actualizarTotalCotizacion();
@@ -1297,15 +1320,14 @@ function cambiarSet(idx, setNumKey) {
     const metaEl = riEl.querySelector('.ri-meta');
     if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase()+' '+nuevaFound.numero+' · <span id="ri-rareza-'+idx+'">'+nuevaFound.variante+'</span> · <span id="ri-idioma-'+idx+'">'+nuevoIdiomaCard+'</span>';
     const controlesWrap = riEl.querySelector('.controles-wrap-'+idx);
-    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, nuevaFound, nuevoIdiomaCard, entry.estado==='parcial');
+    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, nuevaFound, nuevoIdiomaCard, false);
     const bw = riEl.querySelector('.badge-wrap-'+idx);
-    if (bw) {
-      let bh = '';
-      if (entry.estado==='ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
-      else if (entry.estado==='parcial' && entry.disp>0) bh = buildBadgeParcial(entry, idx);
+    if (bw && entry.estado==='ok') {
+      let bh = '<span class="ri-badge badge-ok">En stock</span>';
       if (entry.grupo.some(c=>c.variante==='SIR'&&((c.stk_eng||0)+(c.stk_esp||0)>0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
       bw.innerHTML = bh;
     }
+    sincronizarZonaParcial(riEl, idx, entry);
   }
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarPrecioTarjeta(idx);
@@ -1343,15 +1365,14 @@ function cambiarVarianteKey(idx, key) {
     const metaEl = riEl.querySelector('.ri-meta');
     if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase()+' '+nuevaFound.numero+' · <span id="ri-rareza-'+idx+'">'+nuevaFound.variante+'</span> · <span id="ri-idioma-'+idx+'">'+nuevoIdiomaCard+'</span>';
     const controlesWrap = riEl.querySelector('.controles-wrap-'+idx);
-    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, nuevaFound, nuevoIdiomaCard, entry.estado==='parcial');
+    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, nuevaFound, nuevoIdiomaCard, false);
     const bw = riEl.querySelector('.badge-wrap-'+idx);
-    if (bw) {
-      let bh = '';
-      if (entry.estado==='ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
-      else if (entry.estado==='parcial' && entry.disp>0) bh = buildBadgeParcial(entry, idx);
+    if (bw && entry.estado==='ok') {
+      let bh = '<span class="ri-badge badge-ok">En stock</span>';
       if (entry.grupo.some(c=>c.variante==='SIR'&&((c.stk_eng||0)+(c.stk_esp||0)>0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
       bw.innerHTML = bh;
     }
+    sincronizarZonaParcial(riEl, idx, entry);
   }
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
   actualizarPrecioTarjeta(idx);
@@ -1405,15 +1426,14 @@ function cambiarIdioma(idx, idioma) {
     const metaEl = riEl.querySelector('.ri-meta');
     if (metaEl) metaEl.innerHTML = entry.found.set.toUpperCase()+' '+entry.found.numero+' · <span id="ri-rareza-'+idx+'">'+entry.found.variante+'</span> · <span id="ri-idioma-'+idx+'">'+idioma+'</span>';
     const controlesWrap = riEl.querySelector('.controles-wrap-'+idx);
-    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, entry.found, idioma, entry.estado==='parcial');
+    if (controlesWrap) controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, entry.found, idioma, false);
     const bw = riEl.querySelector('.badge-wrap-'+idx);
-    if (bw) {
-      let bh = '';
-      if (entry.estado==='ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
-      else if (entry.estado==='parcial' && entry.disp>0) bh = buildBadgeParcial(entry, idx);
+    if (bw && entry.estado==='ok') {
+      let bh = '<span class="ri-badge badge-ok">En stock</span>';
       if (entry.grupo.some(c=>c.variante==='SIR'&&((c.stk_eng||0)+(c.stk_esp||0)>0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
       bw.innerHTML = bh;
     }
+    sincronizarZonaParcial(riEl, idx, entry);
   }
   actualizarAvisoIdioma(idx, entry.found, idioma);
   actualizarPrecioTarjeta(idx);
@@ -1773,21 +1793,25 @@ function restaurarCarta(i) {
   else if (estado === 'parcial' && disp > 0) badgesHtml += buildBadgeParcial(entry, i);
   if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
   const avisoIdioma = getAvisoIdioma(i, found, idiomaCard);
+  const tieneParcialR = estado === 'parcial';
   riEl.innerHTML = `
-    <div class="ri-left" style="flex:1;min-width:0">
-      <div class="ri-name">${cap(item.display)}</div>
-      <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaCard}</span></div>
-      <div id="ri-aviso-idioma-${i}">${avisoIdioma}</div>
-      <div class="badge-wrap-${i}" style="margin-top:4px">${badgesHtml}</div>
-      ${buildControles(grupo, i, disp, found, idiomaCard, estado === 'parcial')}
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-      <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
-      <div class="ri-right" id="ri-price-${i}">
-        <div class="ri-unit">${clp(precio)} c/u</div>
-        <div class="ri-sub">${clp(subTotal)}</div>
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:14px 14px 10px">
+      <div class="ri-left" style="flex:1;min-width:0">
+        <div class="ri-name">${cap(item.display)}</div>
+        <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaCard}</span></div>
+        <div id="ri-aviso-idioma-${i}">${avisoIdioma}</div>
+        <div class="badge-wrap-${i}" style="margin-top:4px">${tieneParcialR?'':badgesHtml}</div>
+        ${buildControles(grupo, i, disp, found, idiomaCard, false)}
       </div>
-    </div>`;
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
+        <div class="ri-right" id="ri-price-${i}">
+          <div class="ri-unit">${clp(precio)} c/u</div>
+          <div class="ri-sub">${clp(subTotal)}</div>
+        </div>
+      </div>
+    </div>
+    ${tieneParcialR ? `<div style="border-top:1px solid var(--border);padding:10px 14px 14px"><div class="badge-wrap-${i}">${badgesHtml}</div></div>` : ''}`;
   actualizarTotalCotizacion();
   actualizarResumen();
 }
