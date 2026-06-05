@@ -1177,8 +1177,10 @@ async function cotizar() {
   const totalDisp = cotizadosTemp.reduce((s,e) => s + e.disp * getPrecioEntry(e), 0);
   const cartasSi  = cotizadosTemp.reduce((s,e) => s + e.disp, 0);
   const cartasNo  = nope.reduce((s,d) => s + d.qty, 0);
+  // Total real = qty pedida de disponibles + qty pedida de no disponibles
+  const cartasTotalPedidas = cotizadosTemp.reduce((s,e) => s + e.item.qty, 0) + cartasNo;
 
-  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasSi+cartasNo}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
+  html += `<div class="summary-card" id="resumen-cotizacion"><div class="summary-title">Resumen cotización</div><div class="summary-line"><span>Cartas disponibles</span><strong>${cartasSi} de ${cartasTotalPedidas}</strong></div>${cartasNo > 0 ? `<div class="summary-line"><span>No disponibles</span><strong>${cartasNo} cartas</strong></div>` : ''}<div class="summary-line total-line"><span>Total</span><strong id="total-cotizacion">${clp(totalDisp)}</strong></div></div>`;
 
   // Mostrar barra sticky de acción
   const barraEl = document.getElementById('barraAcciones');
