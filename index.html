@@ -1802,33 +1802,27 @@ function restaurarCarta(i) {
   const { item, found, grupo, disp, idiomaCard, estado } = entry;
   const precio = getPrecioEntry(entry);
   const subTotal = calcSubEntry(entry);
-  const max = Math.min(12, getStock(found, idiomaCard));
   const tieneSIRDisp = grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
   let badgesHtml = '';
-  if (estado === 'ok') badgesHtml += '<span class="ri-badge badge-ok">En stock</span> ';
+  if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
   else if (estado === 'parcial' && disp > 0) badgesHtml += buildBadgeParcial(entry, i);
-  if (tieneSIRDisp) badgesHtml += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
-  const controlesHtml = buildControles(grupo, i, disp, found, idiomaCard, estado === 'parcial');
-  riEl.innerHTML =
-    '<div class="ri-top">' +
-      '<div class="ri-info">' +
-        '<div class="ri-name">' + cap(item.display) + '</div>' +
-        '<div class="ri-meta">' +
-          '<span>' + found.set.toUpperCase() + ' ' + found.numero + '</span>' +
-          '<span class="ri-dot">·</span>' +
-          '<span id="ri-rareza-' + i + '">' + found.variante + '</span>' +
-          '<span class="ri-dot">·</span>' +
-          '<span id="ri-idioma-' + i + '">' + idiomaCard + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div id="ri-price-' + i + '" class="ri-price">' +
-        '<div class="ri-unit">' + clp(precio) + ' c/u</div>' +
-        '<div class="ri-sub">' + clp(subTotal) + '</div>' +
-      '</div>' +
-      '<button class="ri-remove" onclick="eliminarItem(' + i + ')">✕</button>' +
-    '</div>' +
-    '<div class="badge-wrap-' + i + '" style="margin-top:4px">' + badgesHtml + '</div>' +
-    controlesHtml;
+  if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
+  const avisoIdioma = getAvisoIdioma(i, found, idiomaCard);
+  riEl.innerHTML = `
+    <div class="ri-left" style="flex:1;min-width:0">
+      <div class="ri-name">${cap(item.display)}</div>
+      <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaCard}</span></div>
+      <div id="ri-aviso-idioma-${i}">${avisoIdioma}</div>
+      <div class="badge-wrap-${i}" style="margin-top:4px">${badgesHtml}</div>
+      ${buildControles(grupo, i, disp, found, idiomaCard, estado === 'parcial')}
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+      <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
+      <div class="ri-right" id="ri-price-${i}">
+        <div class="ri-unit">${clp(precio)} c/u</div>
+        <div class="ri-sub">${clp(subTotal)}</div>
+      </div>
+    </div>`;
   actualizarTotalCotizacion();
   actualizarResumen();
 }
