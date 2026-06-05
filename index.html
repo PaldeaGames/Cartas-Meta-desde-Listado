@@ -1520,11 +1520,10 @@ function cambiarIdioma(idx, idioma) {
   const stockNuevoId = getStock(entry.found, idioma);
   const maxNuevoId = Math.min(12, stockNuevoId);
   entry.disp = Math.min(Math.max(0, entry.disp), maxNuevoId);
-  const idiomaEl = document.getElementById('ri-idioma-' + idx);
-  if (idiomaEl) idiomaEl.textContent = idioma;
-  // Re-renderizar controles completos para actualizar botones +/−, tope label y qty
   const riElCtrl = document.getElementById('ri-' + idx);
   if (riElCtrl) {
+    const metaEl = riElCtrl.querySelector('.ri-meta');
+    if (metaEl) metaEl.innerHTML = entry.found.set.toUpperCase() + ' ' + entry.found.numero + ' · <span id="ri-rareza-' + idx + '">' + entry.found.variante + '</span> · <span id="ri-idioma-' + idx + '">' + idioma + '</span>';
     const controlesWrap = riElCtrl.querySelector('.controles-wrap-' + idx);
     if (controlesWrap) {
       controlesWrap.innerHTML = buildControles(entry.grupo, idx, entry.disp, entry.found, idioma, entry.estado === 'parcial');
