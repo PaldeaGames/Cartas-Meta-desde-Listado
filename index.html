@@ -345,7 +345,7 @@
             <label>Correo electrónico <span class="req">*</span></label>
             <input type="email" id="correoCliente" placeholder="Ej: maria@gmail.com" />
             <div class="field-error" id="err-correo">Ingresa un correo electrónico válido.</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:5px">📬 Lo usaremos para enviarte ofertas y novedades de Paldea Games.</div>
+            
             <div class="field-error" id="err-usuario">Necesitamos tu usuario para contactarte.</div>
           </div>
 
@@ -429,7 +429,10 @@
               </div>
               <div class="field">
                 <label>Correo electrónico <span class="req">*</span></label>
-                <input type="email" id="correo" placeholder="tu@correo.cl" />
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                  <input type="email" id="correo" placeholder="tu@correo.cl" style="margin-bottom:0;flex:1" />
+                  <button type="button" onclick="usarMismoCorreo()" style="white-space:nowrap;font-size:11px;padding:5px 10px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-soft);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;flex-shrink:0" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-soft)'">↑ Usar el mismo</button>
+                </div>
                 <div class="field-error" id="err-correo">Ingresa un correo válido.</div>
               </div>
             </div>
@@ -1202,11 +1205,28 @@ function cambiarQty(idx, delta) {
 }
 
 function eliminarItem(idx) {
+  const entry = itemsCotizados[idx];
+  if (!entry) return;
+  entry.colapsada = true;
+  entry.disp = 0;
+  if (entry.complementos) entry.complementos = [];
+  const riEl = document.getElementById('ri-' + idx);
+  if (riEl) {
+    const nombreCarta = cap(entry.item.display);
+    const setInfo = entry.found ? entry.found.set.toUpperCase() + ' ' + entry.found.numero : '';
+    riEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 4px;gap:8px">
+      <span style="font-size:12px;color:var(--text-muted)"><span style="text-decoration:line-through">${nombreCarta} ${setInfo}</span> — eliminada</span>
+      <button onclick="restaurarCarta(${idx})" style="font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-soft);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0">↩ Restaurar</button>
+    </div>`;
+  }
+  actualizarTotalCotizacion();
+  actualizarResumen();
+}
+
+function eliminarItemLegacy(idx) {
   itemsCotizados.splice(idx, 1);
-  // Re-renderizar solo la sección de cotización
   const cont = document.getElementById('cotizacionResult');
   if (!cont) return;
-  // Reconstruir lista manteniendo nopes (no disponibles — quedan igual)
   let html = '';
   if (itemsCotizados.length) html += '<div class="section-label">Disponibles</div>';
   itemsCotizados.forEach((entry, i) => {
@@ -1804,6 +1824,17 @@ function restaurarCarta(i) {
   `;
   actualizarTotalCotizacion();
   actualizarResumen();
+}
+
+function usarMismoCorreo() {
+  const correoBase = document.getElementById('correoCliente');
+  const correoEnvio = document.getElementById('correo');
+  if (correoBase && correoEnvio && correoBase.value.trim()) {
+    correoEnvio.value = correoBase.value.trim();
+    // Feedback visual
+    correoEnvio.style.borderColor = 'var(--accent)';
+    setTimeout(() => { correoEnvio.style.borderColor = ''; }, 1500);
+  }
 }
 
 function toggleTooltip() {
