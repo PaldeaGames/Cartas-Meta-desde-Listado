@@ -1785,46 +1785,40 @@ function restaurarCarta(i) {
   const entry = itemsCotizados[i];
   if (!entry) return;
   entry.colapsada = false;
-  // Restaurar estado anterior
   if (entry._dispAntes !== undefined) entry.disp = entry._dispAntes;
   if (entry._compAntes !== undefined) entry.complementos = entry._compAntes;
   const riEl = document.getElementById('ri-' + i);
   if (!riEl) return;
-  // Disparar re-render completo via eliminarItem rebuild
   const { item, found, grupo, disp, idiomaCard, estado } = entry;
   const precio = getPrecioEntry(entry);
   const subTotal = calcSubEntry(entry);
-  const engOk = (found.stk_eng || 0) > 0;
-  const espOk = (found.stk_esp || 0) > 0;
   const max = Math.min(12, getStock(found, idiomaCard));
   const tieneSIRDisp = grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
   let badgesHtml = '';
-  if (estado === 'ok') badgesHtml += `<span class="ri-badge badge-ok">En stock</span> `;
+  if (estado === 'ok') badgesHtml += '<span class="ri-badge badge-ok">En stock</span> ';
   else if (estado === 'parcial' && disp > 0) badgesHtml += buildBadgeParcial(entry, i);
-  if (tieneSIRDisp) badgesHtml += `<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>`;
-  const avisoSet = '';
-  riEl.innerHTML = `
-    <div class="ri-top">
-      <div class="ri-info">
-        <div class="ri-name">\${cap(item.display)}</div>
-        <div class="ri-meta">
-          <span>\${found.set.toUpperCase()} \${found.numero}</span>
-          <span class="ri-dot">·</span>
-          <span id="ri-rareza-\${i}">\${found.variante}</span>
-          <span class="ri-dot">·</span>
-          <span id="ri-idioma-\${i}">\${idiomaCard}</span>
-        </div>
-      </div>
-      <div id="ri-price-\${i}" class="ri-price">
-        <div class="ri-unit">\${clp(precio)} c/u</div>
-        <div class="ri-sub">\${clp(subTotal)}</div>
-      </div>
-      <button class="ri-remove" onclick="eliminarItem(\${i})">✕</button>
-    </div>
-    \${avisoSet}
-    <div class="badge-wrap-\${i}" style="margin-top:4px">\${badgesHtml}</div>
-    \${buildControles(grupo, i, disp, found, idiomaCard, entry.estado==='parcial')}
-  `;
+  if (tieneSIRDisp) badgesHtml += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
+  const controlesHtml = buildControles(grupo, i, disp, found, idiomaCard, estado === 'parcial');
+  riEl.innerHTML =
+    '<div class="ri-top">' +
+      '<div class="ri-info">' +
+        '<div class="ri-name">' + cap(item.display) + '</div>' +
+        '<div class="ri-meta">' +
+          '<span>' + found.set.toUpperCase() + ' ' + found.numero + '</span>' +
+          '<span class="ri-dot">·</span>' +
+          '<span id="ri-rareza-' + i + '">' + found.variante + '</span>' +
+          '<span class="ri-dot">·</span>' +
+          '<span id="ri-idioma-' + i + '">' + idiomaCard + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="ri-price-' + i + '" class="ri-price">' +
+        '<div class="ri-unit">' + clp(precio) + ' c/u</div>' +
+        '<div class="ri-sub">' + clp(subTotal) + '</div>' +
+      '</div>' +
+      '<button class="ri-remove" onclick="eliminarItem(' + i + ')">✕</button>' +
+    '</div>' +
+    '<div class="badge-wrap-' + i + '" style="margin-top:4px">' + badgesHtml + '</div>' +
+    controlesHtml;
   actualizarTotalCotizacion();
   actualizarResumen();
 }
