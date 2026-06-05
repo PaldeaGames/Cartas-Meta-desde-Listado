@@ -628,7 +628,8 @@ function parseLine(line) {
   if (l.startsWith('*')) l = l.replace(/^\*\s*/, '');
   if (!l||l.startsWith('//')||l.startsWith('#')) return null;
   const low = l.toLowerCase();
-  if (low.startsWith('pokemon')||low.startsWith('trainer')||low.startsWith('energy')||low.startsWith('total')) return null;
+  // Ignorar líneas de sección: 'Pokemon: 18', 'Trainer: 27', 'Energy: 15', 'Total: 60'
+  if (/^(pokemon|pokémon|trainer|energy|energía|total|stadium|supporter|item)s?\s*:/i.test(l)) return null;
   // Tomar tokens: primero=qty, último=numero, penúltimo=set, medio=nombre
   const tokens = l.trim().split(/\s+/);
   if (tokens.length < 4) return null;
@@ -790,9 +791,16 @@ function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
   html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   html += '<button id="btn-eng-' + idx + '" class="lang-btn" ' + (engStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ENG\')"' : '') + ' style="' + engStyle + '">ENG</button>';
   html += '<button id="btn-esp-' + idx + '" class="lang-btn" ' + (espStock > 0 ? 'onclick="cambiarIdioma(' + idx + ',\'ESP\')"' : '') + ' style="' + espStyle + '">ESP</button>';
-  html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',-1)">−</button>';
-  html += '<span class="qty-num" id="ri-qty-' + idx + '">' + disp + '</span>';
-  html += '<button class="qty-btn" onclick="cambiarQty(' + idx + ',1)">+</button>';
+  const stockDisp = getStock(found, idiomaCard);
+  const topeQty = Math.min(12, stockDisp);
+  const btnMasStyle = disp >= topeQty ? ' style="opacity:0.3;cursor:not-allowed"' : '';
+  const btnMenosStyle = disp <= 0 ? ' style="opacity:0.3;cursor:not-allowed"' : '';
+  const qtyColor = disp === 0 ? 'var(--text-muted)' : disp >= topeQty ? 'var(--red)' : 'var(--text)';
+  const topeLabel = stockDisp <= 12 ? stockDisp + ' disp.' : '12 máx.';
+  html += '<button class="qty-btn" id="qty-menos-' + idx + '"' + btnMenosStyle + ' onclick="cambiarQty(' + idx + ',-1)">−</button>';
+  html += '<span class="qty-num" id="ri-qty-' + idx + '" style="color:' + qtyColor + '" title="' + topeLabel + '">' + disp + '</span>';
+  html += '<button class="qty-btn" id="qty-mas-' + idx + '"' + btnMasStyle + ' onclick="cambiarQty(' + idx + ',1)">+</button>';
+  html += '<span style="font-size:10px;color:' + (disp >= topeQty ? 'var(--red)' : 'var(--text-muted)') + ';margin-left:2px">/ ' + topeLabel + '</span>';
   html += '</div>';
   html += '</div>';
   return html;
@@ -855,14 +863,15 @@ function buildBadgeParcial(entry, idx) {
 
   if (faltante <= 0) {
     // Completo: mostrar resumen + botón editar
-    if (entry.complementos.length > 0) {
-      html += `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
-      entry.complementos.forEach(comp => {
-        html += `<span style="font-size:11px;color:var(--green)">+ ${comp.qty}× ${comp.variante} ${comp.set.toUpperCase()} ${comp.numero} ${comp.idioma}</span>`;
-      });
+    html += `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
+    entry.complementos.forEach(comp => {
+      html += `<span style="font-size:11px;color:var(--green)">+ ${comp.qty}× ${comp.variante} ${comp.set.toUpperCase()} ${comp.numero} ${comp.idioma}</span>`;
+    });
+    const candidatosDisp = getCandidatos(entry);
+    if (candidatosDisp.length > 0) {
       html += `<button style="font-size:11px;padding:2px 8px;border-radius:12px;border:1px solid var(--border-strong);background:none;color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="editarComplementos(${idx})">Editar →</button>`;
-      html += `</div>`;
     }
+    html += `</div>`;
     return html;
   }
 
@@ -873,7 +882,7 @@ function buildBadgeParcial(entry, idx) {
       const pAlt = getPrecio(c, idioma);
       const compExistente = entry.complementos.find(x => x.key === key);
       const qtyActual = compExistente ? compExistente.qty : 0;
-      const maxEste = Math.min(stockAlt, faltante + qtyActual);
+      const maxEste = Math.min(Math.min(12, stockAlt), faltante + qtyActual);
       const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante} · ${idioma}`;
 
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
@@ -911,6 +920,9 @@ function editarComplementos(idx) {
   const candidatos = getCandidatos(entry);
 
   let html = `<span class="ri-badge badge-par-full">✓ ${totalCubierto} de ${qty} — editando</span>`;
+  if (candidatos.length === 0) {
+    html += `<div style="margin-top:8px;font-size:12px;color:var(--text-muted);padding:8px 0">No hay otras fuentes disponibles para complementar.</div>`;
+  }
   if (candidatos.length > 0) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Editar complementos:</div>`;
     candidatos.slice(0, 8).forEach(({ c, idioma, key }) => {
@@ -975,10 +987,11 @@ function cambiarComplemento(idx, key, delta) {
   let nueva = qtyActual + delta;
   const enEdicion = entry._editandoComplementos;
   if (delta > 0 && faltante <= 0 && !enEdicion) return;
+  const topeComp = Math.min(12, stockAlt); // tope consistente con carta principal
   if (enEdicion) {
-    nueva = Math.max(0, Math.min(stockAlt, nueva));
+    nueva = Math.max(0, Math.min(topeComp, nueva));
   } else {
-    nueva = Math.max(0, Math.min(stockAlt, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
+    nueva = Math.max(0, Math.min(topeComp, Math.min(qtyActual + Math.max(faltante, 0), nueva)));
     if (delta > 0) nueva = Math.min(nueva, qtyActual + faltante);
   }
 
@@ -1091,6 +1104,8 @@ async function cotizar() {
   }
   itemsCotizados = cotizadosTemp;
 
+  // Cerrar panel nope si quedó abierto de cotización anterior
+  document.querySelectorAll('.nope-list').forEach(el => el.style.display = 'none');
   let html = '';
   if (cotizadosTemp.length) html += '<div class="section-label">Disponibles</div>';
 
@@ -1177,7 +1192,7 @@ function calcSubEntry(e) {
 }
 // Helper: total global de todos los items
 function calcTotalGlobal() {
-  return itemsCotizados.reduce((s, e) => s + calcSubEntry(e), 0);
+  return itemsCotizados.reduce((s, e) => s + (e.colapsada ? 0 : calcSubEntry(e)), 0);
 }
 // Helper: actualizar ri-price de una tarjeta sumando complementos
 function actualizarPrecioTarjeta(idx) {
@@ -1195,19 +1210,28 @@ function actualizarTotalCotizacion() {
 
 function cambiarQty(idx, delta) {
   const entry = itemsCotizados[idx];
-  const max   = Math.min(12, getStock(entry.found, entry.idiomaCard));
+  const stockReal = getStock(entry.found, entry.idiomaCard);
+  const max = Math.min(12, stockReal); // tope = 12 por política, o el stock si hay menos
   const nueva = Math.min(max, Math.max(0, entry.disp + delta));
-  entry.disp  = nueva;
+  entry.disp = nueva;
   const qtyEl = document.getElementById('ri-qty-' + idx);
-  if (qtyEl) { qtyEl.textContent = nueva; qtyEl.style.color = nueva === 0 ? 'var(--text-muted)' : nueva >= max ? 'var(--red)' : 'var(--text)'; }
-  actualizarPrecioTarjeta(idx);
-  if (entry.estado === 'parcial') {
-    const riEl = document.getElementById('ri-' + idx);
-    if (riEl) {
+  if (qtyEl) {
+    qtyEl.textContent = nueva;
+    qtyEl.style.color = nueva === 0 ? 'var(--text-muted)' : nueva >= max ? 'var(--red)' : 'var(--text)';
+    qtyEl.title = nueva >= max ? (stockReal <= 12 ? 'Máximo de stock: ' + stockReal : 'Máximo por pedido: 12') : '';
+  }
+  const riEl = document.getElementById('ri-' + idx);
+  if (riEl) {
+    const btnMas = document.getElementById('qty-mas-' + idx);
+    const btnMenos = document.getElementById('qty-menos-' + idx);
+    if (btnMas) { btnMas.style.opacity = nueva >= max ? '0.3' : '1'; btnMas.style.cursor = nueva >= max ? 'not-allowed' : 'pointer'; }
+    if (btnMenos) { btnMenos.style.opacity = nueva <= 0 ? '0.3' : '1'; btnMenos.style.cursor = nueva <= 0 ? 'not-allowed' : 'pointer'; }
+    if (entry.estado === 'parcial') {
       const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
       if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
     }
   }
+  actualizarPrecioTarjeta(idx);
   actualizarTotalCotizacion();
   actualizarResumen();
 }
@@ -1216,6 +1240,7 @@ function eliminarItem(idx) {
   const entry = itemsCotizados[idx];
   if (!entry) return;
   entry.colapsada = true;
+  entry._editandoComplementos = false;
   entry._dispAntes = entry.disp;
   entry._compAntes = entry.complementos ? JSON.parse(JSON.stringify(entry.complementos)) : [];
   entry.disp = 0;
@@ -1493,12 +1518,35 @@ function cambiarIdioma(idx, idioma) {
     );
     if (cartaComp) comp.precio = getPrecio(cartaComp, idioma);
   });
+  // Recalcular disp con el nuevo idioma
+  const stockNuevoId = getStock(entry.found, idioma);
+  const maxNuevoId = Math.min(12, stockNuevoId);
+  entry.disp = Math.min(entry.disp, maxNuevoId);
   const qtyEl = document.getElementById('ri-qty-' + idx);
-  if (qtyEl) qtyEl.textContent = entry.disp;
+  if (qtyEl) {
+    qtyEl.textContent = entry.disp;
+    qtyEl.style.color = entry.disp >= maxNuevoId ? 'var(--red)' : 'var(--text)';
+  }
   const idiomaEl = document.getElementById('ri-idioma-' + idx);
   if (idiomaEl) idiomaEl.textContent = idioma;
+  // Actualizar estado y badge al cambiar idioma
+  const stockIdiomaNew = stockNuevoId;
+  entry.estado = stockIdiomaNew >= entry.item.qty ? 'ok' : 'parcial';
+  if (entry.estado === 'ok') entry.complementos = [];
   actualizarPrecioTarjeta(idx);
   actualizarTotalCotizacion();
+  const riElI = document.getElementById('ri-' + idx);
+  if (riElI) {
+    const bwI = riElI.querySelector('.badge-wrap-' + idx);
+    if (bwI) {
+      let bHI = '';
+      if (entry.estado === 'ok') bHI = '<span class="ri-badge badge-ok">En stock</span>';
+      else if (entry.estado === 'parcial' && entry.disp > 0) bHI = buildBadgeParcial(entry, idx);
+      const tSI = entry.grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
+      if (tSI) bHI += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
+      bwI.innerHTML = bHI;
+    }
+  }
   actualizarResumen();
 }
 
@@ -1587,10 +1635,10 @@ function actualizarResumen() {
   for (const e of itemsCotizados) {
     if (e.colapsada) continue;
     const precio = getPrecioEntry(e);
-    const sub    = e.disp * precio;
+    const sub    = calcSubEntry(e); // incluye complementos
     total += sub;
     const varLabel = e.found.variante !== 'Normal' ? ` · ${e.found.variante}` : '';
-    const idiomaCard = (e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP';
+    const idiomaCard = e.idiomaCard || ((e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP');
     html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
     if (e.disp > 0) {
       compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;border-radius:4px;padding-left:4px" onclick="scrollACarta(${itemsCotizados.indexOf(e)})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Ir a esta carta">
@@ -1690,14 +1738,20 @@ function stockDisponibleRestante(c, idioma) {
   const nomC = norm(c.nombre);
   const setC = norm(c.set);
   const numC = String(parseInt(c.numero));
-  const yaEnPedido = itemsCotizados.filter(e =>
+  const yaEnPedido = itemsCotizados.filter(e => !e.colapsada &&
     norm(e.item.display) === nomC &&
     norm(e.found.set) === setC && String(parseInt(e.found.numero)) === numC
   ).reduce((s, e) => s + e.disp, 0);
+  // También descontar complementos de otros items que apunten a esta carta
+  const yaEnComplementos = itemsCotizados.filter(e => !e.colapsada && e.complementos).reduce((s, e) => {
+    return s + e.complementos.filter(comp =>
+      norm(comp.set) === setC && String(parseInt(comp.numero)) === numC && comp.idioma === idioma
+    ).reduce((s2, comp) => s2 + comp.qty, 0);
+  }, 0);
   const yaEnManuales = itemsManuales.filter(m =>
     norm(m.nombre) === nomC && norm(m.set) === setC && String(parseInt(m.numero)) === numC
   ).reduce((s, m) => s + m.qty, 0);
-  return Math.max(0, stockTotal - yaEnPedido - yaEnManuales);
+  return Math.max(0, stockTotal - yaEnPedido - yaEnComplementos - yaEnManuales);
 }
 
 function buscarCartaManual(q) {
@@ -1794,7 +1848,7 @@ function agregarCartaPtcgl() {
   const precio = idioma === 'ENG' ? (found.prc_eng || 0) : (found.prc_esp || 0);
   // Verificar stock disponible vs lo que ya está en itemsCotizados
   const yaEnPedido = itemsCotizados.filter(e =>
-    norm(e.item.display) === norm(found.nombre) &&
+    norm(e.item.display) === norm(parsed.display) &&
     norm(e.found.set) === norm(found.set) && String(parseInt(e.found.numero)) === String(parseInt(found.numero))
   ).reduce((s, e) => s + e.disp, 0);
   const yaEnManuales = itemsManuales.filter(m =>
@@ -1858,12 +1912,16 @@ function restaurarCarta(i) {
 function usarMismoCorreo() {
   const correoBase = document.getElementById('correoCliente');
   const correoEnvio = document.getElementById('correo');
-  if (correoBase && correoEnvio && correoBase.value.trim()) {
-    correoEnvio.value = correoBase.value.trim();
-    // Feedback visual
-    correoEnvio.style.borderColor = 'var(--accent)';
-    setTimeout(() => { correoEnvio.style.borderColor = ''; }, 1500);
+  if (!correoBase || !correoEnvio) return;
+  const val = correoBase.value.trim();
+  if (!val || !val.includes('@') || !val.includes('.')) {
+    correoBase.style.borderColor = 'var(--red)';
+    setTimeout(() => { correoBase.style.borderColor = ''; }, 1500);
+    return;
   }
+  correoEnvio.value = val;
+  correoEnvio.style.borderColor = 'var(--accent)';
+  setTimeout(() => { correoEnvio.style.borderColor = ''; }, 1500);
 }
 
 function toggleTooltip() {
@@ -1954,7 +2012,8 @@ async function submitPedido() {
 
   const orderItems = [];
   for (const e of itemsCotizados) {
-    if (e.disp > 0) orderItems.push({
+    if (e.colapsada || e.disp <= 0) continue;
+    orderItems.push({
       nombre:    cap(e.item.display) + ' - ' + e.found.variante + ' - ' + (e.idiomaCard||idiomaDefault),
       variante:  e.found.variante,
       idioma:    e.idiomaCard||idiomaDefault,
@@ -2000,6 +2059,7 @@ async function submitPedido() {
     hora:entregaMode==='retiro'?val('retiroHora'):null,
     rut:entregaMode==='envio'?val('rut'):null,
     celular:entregaMode==='envio'?'+569'+val('celular'):null,
+    correoCliente:correoClienteVal,
     correo:entregaMode==='envio'?val('correo'):null,
     direccion:entregaMode==='envio'?direccionStr:null,
     tipoDireccion:entregaMode==='envio'?direccionMode:null
