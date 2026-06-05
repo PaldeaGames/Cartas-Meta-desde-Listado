@@ -1215,6 +1215,10 @@ function cambiarQty(idx, delta) {
   const max = Math.min(12, stockReal); // tope = 12 por política, o el stock si hay menos
   const nueva = Math.min(max, Math.max(0, entry.disp + delta));
   entry.disp = nueva;
+  // Actualizar estado según nueva qty
+  const stockTotal = getStock(entry.found, entry.idiomaCard);
+  const compQty = (entry.complementos||[]).reduce((s,c)=>s+c.qty,0);
+  entry.estado = (nueva + compQty) >= entry.item.qty ? 'ok' : (stockTotal > 0 ? 'parcial' : 'parcial');
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) {
     qtyEl.textContent = nueva;
@@ -1351,62 +1355,18 @@ function cambiarVarianteKey(idx, key) {
 }
 
 function cambiarVariante(idx, varNombre) {
+  // Delegar a cambiarVarianteKey buscando la clave correcta dentro del mismo set+numero
   const entry = itemsCotizados[idx];
-  const engOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_eng || 0) > 0;
-  const espOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_esp || 0) > 0;
-  // Auto-ajustar idioma PER CARD (no global) según disponibilidad de la variante elegida
-  let nuevoIdiomaCard = entry.idiomaCard;
-  if (nuevoIdiomaCard === 'ENG' && !engOkVar && espOkVar) nuevoIdiomaCard = 'ESP';
-  if (nuevoIdiomaCard === 'ESP' && !espOkVar && engOkVar) nuevoIdiomaCard = 'ENG';
-  entry.idiomaCard = nuevoIdiomaCard;
-  // Buscar variante en el mismo set+numero del found actual
+  const foundSetN = norm(entry.found.set||'');
+  const foundNumN = String(parseInt(entry.found.numero));
   const mismoSetActual = entry.grupo.filter(c =>
-    norm(c.set||'') === norm(entry.found.set||'') &&
-    String(parseInt(c.numero)) === String(parseInt(entry.found.numero))
+    norm(c.set||'') === foundSetN && String(parseInt(c.numero)) === foundNumN
   );
-  let nuevaFound = mismoSetActual.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
-    || mismoSetActual.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0))
-    || entry.grupo.find(c => c.variante === varNombre && getStock(c, nuevoIdiomaCard) > 0)
+  const target = mismoSetActual.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0))
     || entry.grupo.find(c => c.variante === varNombre && ((c.stk_eng||0)+(c.stk_esp||0) > 0));
-  if (!nuevaFound) return;
-  entry.found = nuevaFound;
-  const engOk = (nuevaFound.stk_eng || 0) > 0;
-  const espOk = (nuevaFound.stk_esp || 0) > 0;
-  const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
-  entry.disp = Math.min(entry.disp, max);
-  if (entry.disp < 0) entry.disp = 0;
-  const qtyEl = document.getElementById('ri-qty-' + idx);
-  if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
-  const rarezaEl = document.getElementById('ri-rareza-' + idx);
-  if (rarezaEl) rarezaEl.textContent = nuevaFound.variante;
-  const idiomaEl = document.getElementById('ri-idioma-' + idx);
-  if (idiomaEl) idiomaEl.textContent = nuevoIdiomaCard;
-  const btnEng = document.getElementById('btn-eng-' + idx);
-  const btnEsp = document.getElementById('btn-esp-' + idx);
-  if (btnEng) {
-    btnEng.style.borderColor = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--border)';
-    btnEng.style.color = nuevoIdiomaCard==='ENG' ? 'var(--accent)' : 'var(--text-muted)';
-    btnEng.style.background = nuevoIdiomaCard==='ENG' ? 'var(--accent-dim)' : 'transparent';
-    btnEng.style.opacity = engOk ? '1' : '0.35';
-    btnEng.style.textDecoration = engOk ? 'none' : 'line-through';
-    if (engOk) btnEng.setAttribute('onclick', `cambiarIdioma(${idx},'ENG')`);
-    else btnEng.removeAttribute('onclick');
-  }
-  if (btnEsp) {
-    btnEsp.style.borderColor = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--border)';
-    btnEsp.style.color = nuevoIdiomaCard==='ESP' ? 'var(--accent)' : 'var(--text-muted)';
-    btnEsp.style.background = nuevoIdiomaCard==='ESP' ? 'var(--accent-dim)' : 'transparent';
-    btnEsp.style.opacity = espOk ? '1' : '0.35';
-    btnEsp.style.textDecoration = espOk ? 'none' : 'line-through';
-    if (espOk) btnEsp.setAttribute('onclick', `cambiarIdioma(${idx},'ESP')`);
-    else btnEsp.removeAttribute('onclick');
-  }
-  const msgEl = document.getElementById('ri-' + idx)?.querySelector('.stock-msg');
-  if (msgEl) msgEl.remove();
-  actualizarPrecioTarjeta(idx);
-  actualizarTotalCotizacion();
-  actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
-  actualizarResumen();
+  if (!target) return;
+  const key = norm(target.set||'')+'|'+String(parseInt(target.numero))+'|'+target.variante;
+  cambiarVarianteKey(idx, key);
 }
 
 function cambiarIdioma(idx, idioma) {
@@ -1545,18 +1505,16 @@ function actualizarResumen() {
     total += sub;
     const varLabel = e.found.variante !== 'Normal' ? ` · ${e.found.variante}` : '';
     const idiomaCard = e.idiomaCard || ((e.found.stk_eng||0) > 0 ? 'ENG' : 'ESP');
-    html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
+    if (e.disp > 0) html += `<div class="summary-line"><span>${cap(e.item.display)}${varLabel} ${idiomaCard} x${e.disp}</span><strong>${clp(sub)}</strong></div>`;
     if (e.disp > 0) {
       compactoHtml += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;border-radius:4px;padding-left:4px" onclick="scrollACarta(${itemsCotizados.indexOf(e)})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Ir a esta carta">
         <span style="color:var(--text-soft)">${cap(e.item.display)}${varLabel} <span style="font-size:11px;color:var(--text-muted)">${e.found.set.toUpperCase()} · ${idiomaCard} · x${e.disp}</span></span>
         <strong style="color:var(--text);flex-shrink:0;margin-left:12px">${clp(sub)}</strong>
       </div>`;
     }
-    // Complementos de sets alternativos
     if (e.complementos) {
       for (const comp of e.complementos) {
         const subComp = comp.qty * comp.precio;
-        total += subComp;
         const compLabel = cap(e.item.display) + (comp.variante !== 'Normal' ? ' · ' + comp.variante : '') + ' ' + comp.set.toUpperCase() + ' ' + comp.numero;
         const compIdioma = comp.idioma || idiomaCard;
         html += `<div class="summary-line"><span>${compLabel} ${compIdioma} x${comp.qty} <span style="font-size:10px;color:var(--blue)">para completar</span></span><strong>${clp(subComp)}</strong></div>`;
@@ -1587,11 +1545,12 @@ function actualizarResumen() {
   // Actualizar contador "Cartas disponibles X de Y" en el resumen de cotización
   const elCartasSi = document.getElementById('resumen-cartas-si');
   if (elCartasSi) {
-    const totalDisponibles = itemsCotizados.filter(e=>!e.colapsada).reduce((s,e) => {
+    const totalDisponibles = itemsCotizados.reduce((s,e) => {
+      if (e.colapsada) return s;
       const compQty = (e.complementos||[]).reduce((a,c)=>a+c.qty,0);
-      return s + e.disp + compQty;
+      return s + Math.min(e.disp + compQty, e.item.qty);
     }, 0) + (itemsManuales||[]).reduce((s,e)=>s+e.qty,0);
-    const totalPedidas = itemsCotizados.reduce((s,e)=>s+e.item.qty,0);
+    const totalPedidas = itemsCotizados.reduce((s,e)=> e.colapsada ? s : s+e.item.qty, 0);
     elCartasSi.textContent = totalDisponibles + ' de ' + totalPedidas;
   }
 }
