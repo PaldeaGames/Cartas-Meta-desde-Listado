@@ -680,7 +680,13 @@ function parseLine(line) {
 // Busca todas las entradas del inventario para una carta (nombre+set+numero)
 // El inventario nuevo tiene una entrada por carta×variante con stk_esp y stk_eng
 function getStock(c, idioma) { const id = idioma || idiomaDefault; return id === 'ENG' ? (c.stk_eng || 0) : (c.stk_esp || 0); }
-function getPrecio(c, idioma) { const id = idioma || idiomaDefault; return id === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0); }
+function getPrecio(c, idioma) {
+  const id = idioma || idiomaDefault;
+  const p = id === 'ENG' ? (c.prc_eng || 0) : (c.prc_esp || 0);
+  if (p > 0) return p;
+  // fallback al otro idioma si el precio es 0
+  return id === 'ENG' ? (c.prc_esp || 0) : (c.prc_eng || 0);
+}
 function getStockEntry(e) { return getStock(e.found, e.idiomaCard); }
 function getPrecioEntry(e) { return getPrecio(e.found, e.idiomaCard); }
 
@@ -750,7 +756,7 @@ function cap(s) { return s.replace(/(?:^|\s)\S/g,c=>c.toUpperCase()); }
 
 function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
   if (!idiomaCard) idiomaCard = idiomaDefault;
-  let html = '<div style="margin-top:6px">';
+  let html = '<div class="controles-wrap-' + idx + '" style="margin-top:6px">';
 
   // ── SET selector — solo si NO tiene SIR, NO es parcial ─────
   // Para parciales el set principal es fijo; el complemento se maneja en buildBadgeParcial
@@ -801,8 +807,7 @@ function buildControles(grupo, idx, disp, found, idiomaCard, esParcial) {
     html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">Elige tu rareza</div>';
     html += '<select class="variant-select" id="sel-var-' + idx + '" onchange="cambiarVarianteKey(' + idx + ',this.value)" style="margin-bottom:8px">';
     varOpts.forEach(([k, c]) => {
-      const engTieneStock = (c.stk_eng||0) > 0;
-      const precio = (idiomaCard === 'ENG' && engTieneStock) ? (c.prc_eng||0) : (c.prc_esp||0)||(c.prc_eng||0);
+      const precio = getPrecio(c, idiomaCard);
       const esOtroSet = norm(c.set||'') !== foundSetNorm || String(parseInt(c.numero)) !== foundNumNorm;
       const label = esOtroSet
         ? c.set.toUpperCase()+' '+c.numero+' · '+c.variante+(precio>0?' — '+clp(precio):'')
@@ -921,41 +926,37 @@ function buildBadgeParcial(entry, idx) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Completar con — necesitas ${faltante} más:</div>`;
     const grupos = getCandidatosAgrupados(entry);
     grupos.slice(0, 6).forEach(({ c, idiomas }) => {
-      const cartaKey = norm(c.set||'')+'|'+parseInt(c.numero)+'|'+c.variante;
-      let idiomaActivo = (entry._idiomaCompActivo && entry._idiomaCompActivo[cartaKey]) || idiomas[0];
-      for (const id of idiomas) {
-        if (entry.complementos.find(x => x.key === getKeyComp(c, id) && x.qty > 0)) { idiomaActivo = id; break; }
-      }
-      const keyActivo = getKeyComp(c, idiomaActivo);
-      const compActivo = entry.complementos.find(x => x.key === keyActivo);
-      const qtyActual = compActivo ? compActivo.qty : 0;
-      const stockActivo = getStock(c, idiomaActivo);
-      const pActivo = getPrecio(c, idiomaActivo);
-      const maxEste = Math.min(Math.min(12, stockActivo), faltante + qtyActual);
       const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
-      html += `<div style="flex:1;min-width:0">`;
-      html += `<div style="font-size:12px;font-weight:500;margin-bottom:4px">${etiqueta}</div>`;
-      html += `<div style="display:flex;gap:5px;margin-bottom:4px">`;
+      // Siempre una fila por idioma — independientes y acumulables
       idiomas.forEach(id => {
-        const esActivo = id === idiomaActivo;
+        const key = getKeyComp(c, id);
+        const comp = entry.complementos.find(x => x.key === key);
+        const qtyActual = comp ? comp.qty : 0;
         const stk = getStock(c, id);
-        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${cartaKey}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
-      });
-      html += `</div>`;
-      html += `<div style="font-size:11px;color:var(--text-muted)">${clp(pActivo)} c/u</div>`;
-      html += `</div>`;
-      if (stockActivo === 1) {
-        const yaAgregado = qtyActual > 0;
-        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${keyActivo}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
-      } else {
-        html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${keyActivo}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
-        html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${keyActivo}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+        const p = getPrecio(c, id);
+        const totalCompActual = entry.complementos.reduce((s,x)=>s+x.qty,0);
+        const cubierto = entry.disp + totalCompActual;
+        const faltanteActual = entry.item.qty - cubierto;
+        const maxEste = Math.min(Math.min(12, stk), faltanteActual + qtyActual);
+        html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
+        html += `<div style="flex:1;min-width:0">`;
+        html += `<div style="font-size:12px;font-weight:500;margin-bottom:2px">${etiqueta}</div>`;
+        html += `<div style="display:flex;align-items:center;gap:8px">`;
+        html += `<span style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-family:'DM Sans',sans-serif;font-weight:600">${id} · ${stk} disp.</span>`;
+        html += `<span style="font-size:11px;color:var(--text-muted)">${clp(p)} c/u</span>`;
+        html += `</div></div>`;
+        if (stk === 1) {
+          const ya = qtyActual > 0;
+          html += `<button class="comp-btn${ya?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${key}',${ya?-1:1})">${ya?'✓ Agregado':'+ Agregar'}</button>`;
+        } else {
+          html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
+          html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+          html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
+          html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+          html += `</div>`;
+        }
         html += `</div>`;
-      }
-      html += `</div>`;
+      });
     });
   }
   return html;
@@ -982,38 +983,32 @@ function editarComplementos(idx) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Editar complementos:</div>`;
     const grupos = getCandidatosAgrupados(entry);
     grupos.slice(0, 6).forEach(({ c, idiomas }) => {
-      const cartaKey = norm(c.set||'')+'|'+parseInt(c.numero)+'|'+c.variante;
-      let idiomaActivo = (entry._idiomaCompActivo && entry._idiomaCompActivo[cartaKey]) || idiomas[0];
-      for (const id of idiomas) {
-        if (entry.complementos.find(x => x.key === getKeyComp(c, id) && x.qty > 0)) { idiomaActivo = id; break; }
-      }
-      const keyActivo = getKeyComp(c, idiomaActivo);
-      const compActivo = entry.complementos.find(x => x.key === keyActivo);
-      const qtyActual = compActivo ? compActivo.qty : 0;
-      const stockActivo = getStock(c, idiomaActivo);
-      const pActivo = getPrecio(c, idiomaActivo);
-      const maxEste = Math.min(stockActivo, qty);
       const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
-      html += `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;margin-bottom:4px">${etiqueta}</div>`;
-      html += `<div style="display:flex;gap:5px;margin-bottom:4px">`;
       idiomas.forEach(id => {
-        const esActivo = id === idiomaActivo;
+        const key = getKeyComp(c, id);
+        const comp = entry.complementos.find(x => x.key === key);
+        const qtyActual = comp ? comp.qty : 0;
         const stk = getStock(c, id);
-        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${cartaKey}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
-      });
-      html += `</div><div style="font-size:11px;color:var(--text-muted)">${clp(pActivo)} c/u</div></div>`;
-      if (stockActivo === 1) {
-        const yaAgregado = qtyActual > 0;
-        html += `<button class="comp-btn${yaAgregado?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${keyActivo}',${yaAgregado?-1:1})">${yaAgregado?'✓ Agregado':'+ Agregar'}</button>`;
-      } else {
-        html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${keyActivo}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
-        html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
-        html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${keyActivo}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+        const p = getPrecio(c, id);
+        const maxEste = Math.min(stk, qty);
+        html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
+        html += `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;margin-bottom:2px">${etiqueta}</div>`;
+        html += `<div style="display:flex;align-items:center;gap:8px">`;
+        html += `<span style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-family:'DM Sans',sans-serif;font-weight:600">${id} · ${stk} disp.</span>`;
+        html += `<span style="font-size:11px;color:var(--text-muted)">${clp(p)} c/u</span>`;
+        html += `</div></div>`;
+        if (stk === 1) {
+          const ya = qtyActual > 0;
+          html += `<button class="comp-btn${ya?' active':''}" style="flex-shrink:0" onclick="cambiarComplemento(${idx},'${key}',${ya?-1:1})">${ya?'✓ Agregado':'+ Agregar'}</button>`;
+        } else {
+          html += `<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">`;
+          html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',-1)" ${qtyActual===0?'style="opacity:0.3;cursor:not-allowed"':''}>−</button>`;
+          html += `<span style="font-size:13px;font-weight:600;min-width:18px;text-align:center;color:${qtyActual>0?'var(--accent)':'var(--text-muted)'}">${qtyActual}</span>`;
+          html += `<button class="qty-btn" onclick="cambiarComplemento(${idx},'${key}',1)" ${qtyActual>=maxEste?'style="opacity:0.3;cursor:not-allowed"':''}>+</button>`;
+          html += `</div>`;
+        }
         html += `</div>`;
-      }
-      html += `</div>`;
+      });
     });
   }
   html += `<button style="margin-top:8px;font-size:11px;padding:4px 12px;border-radius:12px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="cerrarEdicionComplementos(${idx})">✓ Listo</button>`;
@@ -1177,9 +1172,9 @@ async function cotizar() {
     const { grupo, fase } = resultado;
     // Usar found del resultado (ya apunta al set/numero pedido); fallback a preferencia Normal
     const found = resultado.found
-      || grupo.find(c => c.variante === 'Normal' && getStock(c) > 0)
-      || grupo.find(c => c.variante !== 'SIR' && getStock(c) > 0)
-      || grupo.find(c => getStock(c) > 0)
+      || grupo.find(c => c.variante === 'Normal' && getStock(c, idiomaCard) > 0)
+      || grupo.find(c => c.variante !== 'SIR' && getStock(c, idiomaCard) > 0)
+      || grupo.find(c => getStock(c, idiomaCard) > 0)
       || grupo[0];
     const tieneSIRDisp = tieneSIR(grupo);
     // Determinar idioma ANTES de calcular stock/disp
@@ -1516,12 +1511,24 @@ function cambiarVarianteKey(idx, key) {
   actualizarPrecioTarjeta(idx);
   actualizarTotalCotizacion();
   actualizarAvisoIdioma(idx, nuevaFound, nuevoIdiomaCard);
+  const riElV = document.getElementById('ri-' + idx);
+  if (riElV) {
+    const cw = riElV.querySelector('.controles-wrap-' + idx);
+    if (cw) { const t=document.createElement('div'); t.innerHTML=buildControles(entry.grupo,idx,entry.disp,nuevaFound,nuevoIdiomaCard,entry.estado==='parcial'); cw.replaceWith(t.firstChild); }
+    const bw = riElV.querySelector('.badge-wrap-' + idx);
+    if (bw) {
+      let bh = '';
+      if (entry.estado === 'ok') bh = '<span class="ri-badge badge-ok">En stock</span>';
+      else if (entry.estado === 'parcial' && entry.disp > 0) bh = buildBadgeParcial(entry, idx);
+      if (entry.grupo.some(c => c.variante === 'SIR' && ((c.stk_eng||0)+(c.stk_esp||0) > 0))) bh += '<span class="ri-badge badge-alt">✦ Versión SIR disponible</span>';
+      bw.innerHTML = bh;
+    }
+  }
   actualizarResumen();
 }
 
 function cambiarVariante(idx, varNombre) {
   const entry = itemsCotizados[idx];
-  const engOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_eng || 0) > 0;
   const espOkVar = (entry.grupo.find(c => c.variante === varNombre)?.stk_esp || 0) > 0;
   // Auto-ajustar idioma PER CARD (no global) según disponibilidad de la variante elegida
   let nuevoIdiomaCard = entry.idiomaCard;
