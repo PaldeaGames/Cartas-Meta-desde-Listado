@@ -25,7 +25,8 @@
   @media(min-width:900px){
     .page{max-width:1200px}
     #layoutWrapper{display:grid;grid-template-columns:340px 1fr;gap:32px;align-items:start;min-height:calc(100vh - 200px)}
-    #colLeft{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow-y:auto}
+    #colLeft{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow-y:auto;scrollbar-width:none}
+    #colLeft::-webkit-scrollbar{display:none}
     #colRight{min-width:0;position:relative}
   #barraAcciones{position:sticky;bottom:0;background:linear-gradient(to bottom, transparent, var(--bg) 40%);padding:20px 0 8px;margin-top:8px;z-index:10}
     #stepCotizacion:not(.oculto){display:block}
@@ -75,7 +76,7 @@
   input:focus,textarea:focus,select:focus{border-color:var(--accent)}
   input::placeholder,textarea::placeholder{color:var(--text-muted)}
   select option{background:#1e1e26;color:var(--text)}
-  textarea{resize:none;min-height:80px;font-family:var(--mono);font-size:13px;line-height:1.7;overflow:hidden}
+  textarea{resize:none;min-height:80px;font-family:var(--mono);font-size:13px;line-height:1.7;overflow-y:auto}
   .field-error{font-size:12px;color:var(--red);margin-top:5px;display:none}
   .field-error.show{display:block}
   input.error,textarea.error,select.error{border-color:var(--red)}
@@ -261,19 +262,6 @@
             <label style="margin-bottom:0">Pega tu lista de deck</label>
             <div class="tooltip-wrap">
               <div class="tooltip-icon" onclick="toggleTooltip()">i</div>
-              <div class="tooltip-overlay" id="tooltipOverlay" onclick="toggleTooltip()"></div>
-              <div class="tooltip-box" id="tooltipBox">
-                <span class="tooltip-close" onclick="toggleTooltip()">✕</span>
-                <strong>Formatos aceptados:</strong><br><br>
-                Desde <strong>PTCGL / Pokémon Live:</strong><br>
-                <code>* 4 Boss's Orders PAL 172</code><br><br>
-                Desde <strong>Limitless / PTCGO:</strong><br>
-                <code>4 Boss's Orders PAL 172</code><br><br>
-                <strong>Manual (sin ceros):</strong><br>
-                <code>4 Boss's Orders PAL 172</code><br>
-                <code>4 Chikorita PAL 1</code><br><br>
-                El sistema acepta mayúsculas, minúsculas y números con o sin ceros iniciales.
-              </div>
             </div>
           </div>
           <textarea id="deckInput" placeholder="4 Chikorita PAL 001&#10;2 Meganium TEF 016&#10;4 Boss's Orders PAL 172&#10;2 Professor's Research SVI 189"></textarea>
@@ -281,9 +269,9 @@
           <div style="font-size:12px;color:#ff6b6b;margin-top:6px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.25);border-radius:6px;padding:7px 10px">⚠️ Los resultados se muestran en <strong>inglés (ENG)</strong> por defecto. Puedes cambiar el idioma carta por carta en los resultados.</div>
           <div class="field-error" id="err-deck">Ingresa al menos una carta en formato válido.</div>
         </div>
-        <div style="display:flex;gap:8px;margin-top:0">
+        <div style="position:sticky;bottom:0;background:var(--surface);padding:10px 0 2px;margin-top:8px;display:flex;gap:8px;z-index:5">
           <button class="cotizar-btn" id="btnCotizar" onclick="cotizar()" style="flex:1;margin-top:0">Ver disponibilidad y precios →</button>
-          <button onclick="limpiarDeck()" style="padding:10px 16px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;white-space:nowrap" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-muted)'">🗑 Limpiar</button>
+          <button onclick="limpiarDeck()" style="padding:10px 16px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface2);color:var(--text-muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;white-space:nowrap" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-muted)'">🗑 Limpiar lista</button>
         </div>
       </div>
     </div>
@@ -620,7 +608,7 @@ cargarInventario();
     }
     src.remove();
   }
-  // Auto-resize textarea
+  // Auto-resize textarea sin límite
   const ta = document.getElementById('deckInput');
   if (ta) {
     ta.addEventListener('input', function() {
@@ -1993,9 +1981,32 @@ function usarMismoCorreo() {
 }
 
 function toggleTooltip() {
-  const box = document.getElementById('tooltipBox');
-  const overlay = document.getElementById('tooltipOverlay');
-  if (!box || !overlay) return;
+  let overlay = document.getElementById('tooltipOverlay');
+  let box = document.getElementById('tooltipBox');
+  // Crear en body si no existen (portal para evitar overflow:hidden del colLeft)
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'tooltipOverlay';
+    overlay.className = 'tooltip-overlay';
+    overlay.onclick = toggleTooltip;
+    document.body.appendChild(overlay);
+  }
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'tooltipBox';
+    box.className = 'tooltip-box';
+    box.innerHTML = `<span class="tooltip-close" onclick="toggleTooltip()">✕</span>
+      <strong>Formatos aceptados:</strong><br><br>
+      Desde <strong>PTCGL / Pokémon Live:</strong><br>
+      <code>* 4 Boss's Orders PAL 172</code><br><br>
+      Desde <strong>Limitless / PTCGO:</strong><br>
+      <code>4 Boss's Orders PAL 172</code><br><br>
+      <strong>Manual (sin ceros):</strong><br>
+      <code>4 Boss's Orders PAL 172</code><br>
+      <code>4 Chikorita PAL 1</code><br><br>
+      El sistema acepta mayúsculas, minúsculas y números con o sin ceros iniciales.`;
+    document.body.appendChild(box);
+  }
   const show = !box.classList.contains('show');
   box.classList.toggle('show', show);
   overlay.classList.toggle('show', show);
