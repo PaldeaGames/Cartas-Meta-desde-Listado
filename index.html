@@ -1114,6 +1114,7 @@ function cambiarComplemento(idx, key, delta) {
   if (priceEl) priceEl.innerHTML = `<div class="ri-unit">${clp(precioP)} c/u</div><div class="ri-sub">${clp(subTotal)}</div>`;
   // Actualizar total cotización
   const nuevoTotal = itemsCotizados.reduce((s, e) => {
+    if (e.colapsada) return s;
     let sub = e.disp * getPrecioEntry(e);
     if (e.complementos) e.complementos.forEach(c => sub += c.qty * c.precio);
     return s + sub;
@@ -1304,6 +1305,9 @@ function cambiarQty(idx, delta) {
   const max = Math.min(12, stockReal); // tope = 12 por política, o el stock si hay menos
   const nueva = Math.min(max, Math.max(0, entry.disp + delta));
   entry.disp = nueva;
+  const compQtyQ = (entry.complementos||[]).reduce((s,c)=>s+c.qty,0);
+  entry.estado = (nueva + compQtyQ) >= entry.item.qty ? 'ok' : 'parcial';
+  if (entry.estado === 'ok') entry.complementos = [];
   const qtyEl = document.getElementById('ri-qty-' + idx);
   if (qtyEl) {
     qtyEl.textContent = nueva;
@@ -1356,9 +1360,9 @@ function cambiarSet(idx, setNumKey) {
     norm(c.set) === setN && String(parseInt(c.numero)) === numN
   );
   if (!grupoSet.length) return;
-  const nuevaFound = grupoSet.find(c => c.variante === entry.found.variante && getStock(c) > 0)
-    || grupoSet.find(c => c.variante === 'Normal' && getStock(c) > 0)
-    || grupoSet.find(c => getStock(c) > 0)
+  const nuevaFound = grupoSet.find(c => c.variante === entry.found.variante && getStock(c, entry.idiomaCard) > 0)
+    || grupoSet.find(c => c.variante === 'Normal' && getStock(c, entry.idiomaCard) > 0)
+    || grupoSet.find(c => getStock(c, entry.idiomaCard) > 0)
     || grupoSet[0];
   // Auto-ajustar idioma al disponible en el nuevo set
   const engNuevo = (nuevaFound.stk_eng || 0) > 0;
@@ -1371,6 +1375,9 @@ function cambiarSet(idx, setNumKey) {
   entry.esAlternativa = false;
   const max = Math.min(12, getStock(nuevaFound, nuevoIdiomaCard));
   entry.disp = Math.min(entry.disp, max);
+  const stockNuevoSet = getStock(nuevaFound, nuevoIdiomaCard);
+  entry.estado = stockNuevoSet >= entry.item.qty ? 'ok' : 'parcial';
+  if (entry.estado === 'ok') entry.complementos = [];
   // Actualizar meta
   const riEl = document.getElementById('ri-' + idx);
   if (riEl) {
@@ -1480,7 +1487,7 @@ function cambiarVarianteKey(idx, key) {
     if (metaEl) metaEl.innerHTML = nuevaFound.set.toUpperCase()+' '+nuevaFound.numero+' · <span id="ri-rareza-'+idx+'">'+nuevaFound.variante+'</span> · <span id="ri-idioma-'+idx+'">'+nuevoIdiomaCard+'</span>';
   }
   const qtyEl = document.getElementById('ri-qty-'+idx);
-  if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
+  if (qtyEl) { qtyEl.textContent = entry.disp; qtyEl.style.color = entry.disp <= 0 ? 'var(--text-muted)' : entry.disp >= max ? 'var(--red)' : 'var(--text)'; }
   const btnEng = document.getElementById('btn-eng-'+idx);
   const btnEsp = document.getElementById('btn-esp-'+idx);
   if (btnEng) {
@@ -2054,6 +2061,7 @@ function limpiarDeck() {
   itemsCotizados = [];
   itemsManuales = [];
   document.getElementById('stepCotizacion').style.display = 'none';
+  document.getElementById('stepCotizacion').classList.add('oculto');
   document.getElementById('stepPedido').style.display = 'none';
   const barra = document.getElementById('barraAcciones');
   if (barra) barra.style.display = 'none';
@@ -2138,9 +2146,9 @@ async function submitPedido() {
     });
     if (e.complementos) for (const comp of e.complementos) {
       orderItems.push({
-        nombre:    cap(e.item.display) + ' - ' + comp.variante + ' - ' + (e.idiomaCard||idiomaDefault),
+        nombre:    cap(e.item.display) + ' - ' + comp.variante + ' - ' + comp.idioma,
         variante:  comp.variante,
-        idioma:    e.idiomaCard||idiomaDefault,
+        idioma:    comp.idioma,
         set:       comp.set.toUpperCase(),
         numero:    comp.numero,
         cantidad:  comp.qty,
