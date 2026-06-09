@@ -826,10 +826,12 @@ function getCandidatos(entry) {
   const foundSetN = norm(found.set||'');
   const foundNumN = String(parseInt(found.numero));
   const candidatos = [];
+  // La carta principal en el idioma alternativo (si tiene stock)
   const idiomaAlt = idiomaCard === 'ENG' ? 'ESP' : 'ENG';
   if (getStock(found, idiomaAlt) > 0) {
     candidatos.push({ c: found, idioma: idiomaAlt, key: getKeyComp(found, idiomaAlt) });
   }
+  // Otras cartas del grupo (otro set u otra rareza) en cualquier idioma con stock
   for (const c of grupo) {
     const cSetN = norm(c.set||'');
     const cNumN = String(parseInt(c.numero));
@@ -845,7 +847,6 @@ function getCandidatos(entry) {
   return candidatos;
 }
 
-// Agrupa candidatos por carta (set+numero+variante), cada grupo tiene idiomas disponibles
 function getCandidatosAgrupados(entry) {
   const candidatos = getCandidatos(entry);
   const grupos = new Map();
@@ -898,12 +899,10 @@ function buildBadgeParcial(entry, idx) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Completar con — necesitas ${faltante} más:</div>`;
     const grupos = getCandidatosAgrupados(entry);
     grupos.slice(0, 6).forEach(({ c, idiomas }) => {
-      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
       const cartaKey = norm(c.set||'')+'|'+parseInt(c.numero)+'|'+c.variante;
       let idiomaActivo = (entry._idiomaCompActivo && entry._idiomaCompActivo[cartaKey]) || idiomas[0];
       for (const id of idiomas) {
-        const k = getKeyComp(c, id);
-        if (entry.complementos.find(x => x.key === k && x.qty > 0)) { idiomaActivo = id; break; }
+        if (entry.complementos.find(x => x.key === getKeyComp(c, id) && x.qty > 0)) { idiomaActivo = id; break; }
       }
       const keyActivo = getKeyComp(c, idiomaActivo);
       const compActivo = entry.complementos.find(x => x.key === keyActivo);
@@ -911,17 +910,15 @@ function buildBadgeParcial(entry, idx) {
       const stockActivo = getStock(c, idiomaActivo);
       const pActivo = getPrecio(c, idiomaActivo);
       const maxEste = Math.min(Math.min(12, stockActivo), faltante + qtyActual);
-
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;" id="comp-card-${idx}-${norm(c.set||'')}${parseInt(c.numero)}${c.variante}">`;
+      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0">`;
       html += `<div style="font-size:12px;font-weight:500;margin-bottom:4px">${etiqueta}</div>`;
-      // Botones ENG/ESP
       html += `<div style="display:flex;gap:5px;margin-bottom:4px">`;
       idiomas.forEach(id => {
-        const k = getKeyComp(c, id);
         const esActivo = id === idiomaActivo;
         const stk = getStock(c, id);
-        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${norm(c.set||'')}|${parseInt(c.numero)}|${c.variante}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
+        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${cartaKey}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
       });
       html += `</div>`;
       html += `<div style="font-size:11px;color:var(--text-muted)">${clp(pActivo)} c/u</div>`;
@@ -963,12 +960,10 @@ function editarComplementos(idx) {
     html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Editar complementos:</div>`;
     const grupos = getCandidatosAgrupados(entry);
     grupos.slice(0, 6).forEach(({ c, idiomas }) => {
-      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
       const cartaKey = norm(c.set||'')+'|'+parseInt(c.numero)+'|'+c.variante;
       let idiomaActivo = (entry._idiomaCompActivo && entry._idiomaCompActivo[cartaKey]) || idiomas[0];
       for (const id of idiomas) {
-        const k = getKeyComp(c, id);
-        if (entry.complementos.find(x => x.key === k && x.qty > 0)) { idiomaActivo = id; break; }
+        if (entry.complementos.find(x => x.key === getKeyComp(c, id) && x.qty > 0)) { idiomaActivo = id; break; }
       }
       const keyActivo = getKeyComp(c, idiomaActivo);
       const compActivo = entry.complementos.find(x => x.key === keyActivo);
@@ -976,13 +971,14 @@ function editarComplementos(idx) {
       const stockActivo = getStock(c, idiomaActivo);
       const pActivo = getPrecio(c, idiomaActivo);
       const maxEste = Math.min(stockActivo, qty);
+      const etiqueta = `${cap(item.display)} ${c.set.toUpperCase()} ${c.numero} · ${c.variante}`;
       html += `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--surface);border:1px solid ${qtyActual>0?'var(--accent)':'var(--border)'};border-radius:8px;padding:7px 10px;">`;
       html += `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;margin-bottom:4px">${etiqueta}</div>`;
       html += `<div style="display:flex;gap:5px;margin-bottom:4px">`;
       idiomas.forEach(id => {
         const esActivo = id === idiomaActivo;
         const stk = getStock(c, id);
-        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${norm(c.set||'')}|${parseInt(c.numero)}|${c.variante}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
+        html += `<button onclick="cambiarIdiomaComplemento(${idx},'${cartaKey}','${id}')" style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid ${esActivo?'var(--accent)':'var(--border)'};background:${esActivo?'var(--accent-dim)':'transparent'};color:${esActivo?'var(--accent)':'var(--text-muted)'};cursor:pointer;font-family:'DM Sans',sans-serif">${id} · ${stk} disp.</button>`;
       });
       html += `</div><div style="font-size:11px;color:var(--text-muted)">${clp(pActivo)} c/u</div></div>`;
       if (stockActivo === 1) {
@@ -1017,17 +1013,20 @@ function cambiarIdiomaComplemento(idx, cartaKey, nuevoIdioma) {
   const [setN, numN, varN] = cartaKey.split('|');
   // Quitar qty del idioma anterior para esta carta
   entry.complementos = (entry.complementos||[]).filter(x => {
-    const parts = x.key.split('|');
-    return !(parts[0]===setN && parts[1]===numN && parts[2]===varN);
+    const p = x.key.split('|');
+    return !(p[0]===setN && p[1]===numN && p[2]===varN);
   });
-  // Re-render badge con nuevo idioma activo
-  const riEl = document.getElementById('ri-' + idx);
-  if (!riEl) return;
-  // Guardar idiomaActivo por carta para que buildBadgeParcial lo recuerde
+  // Guardar idioma activo por carta
   if (!entry._idiomaCompActivo) entry._idiomaCompActivo = {};
   entry._idiomaCompActivo[cartaKey] = nuevoIdioma;
+  // Re-render badge
+  const riEl = document.getElementById('ri-' + idx);
+  if (!riEl) return;
   const badgeWrap = riEl.querySelector('.badge-wrap-' + idx);
-  if (badgeWrap) badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+  if (badgeWrap) {
+    if (entry._editandoComplementos) editarComplementos(idx);
+    else badgeWrap.innerHTML = buildBadgeParcial(entry, idx);
+  }
   actualizarResumen();
 }
 
@@ -1203,8 +1202,8 @@ async function cotizar() {
         <div class="ri-name">${cap(item.display)}</div>
         <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${idx}">${found.variante}</span> · <span id="ri-idioma-${idx}">${entry.idiomaCard}</span></div>
         ${avisoSet}<div id="ri-aviso-idioma-${idx}">${avisoIdioma}</div>
-        <div class="badge-wrap-${idx}" style="margin-top:4px">${badgesHtml}</div>
         ${buildControles(grupo, idx, disp, found, entry.idiomaCard, estado==='parcial')}
+        <div class="badge-wrap-${idx}" style="margin-top:4px">${badgesHtml}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
         <button class="ri-remove" onclick="eliminarItem(${idx})" title="Quitar carta">✕</button>
@@ -1553,9 +1552,12 @@ function cambiarVariante(idx, varNombre) {
 function cambiarIdioma(idx, idioma) {
   const entry = itemsCotizados[idx];
   entry.idiomaCard = idioma;
-  // Cambiar solo este item al nuevo idioma, manteniendo variante
-  const nuevaFound = entry.grupo.find(c => c.variante === entry.found.variante && getStock(c, idioma) > 0)
-    || entry.grupo.find(c => c.variante === entry.found.variante);
+  // Buscar dentro del mismo set+numero primero para no saltar a otro set
+  const foundSetN = norm(entry.found.set||'');
+  const foundNumN = String(parseInt(entry.found.numero));
+  const nuevaFound =
+    entry.grupo.find(c => norm(c.set||'')===foundSetN && String(parseInt(c.numero))===foundNumN && c.variante===entry.found.variante && getStock(c,idioma)>0)
+    || entry.grupo.find(c => norm(c.set||'')===foundSetN && String(parseInt(c.numero))===foundNumN && c.variante===entry.found.variante);
   if (!nuevaFound) return;
   entry.found = nuevaFound;
   const engOk = (nuevaFound.stk_eng || 0) > 0;
@@ -1961,8 +1963,8 @@ function restaurarCarta(i) {
       <div class="ri-name">${cap(item.display)}</div>
       <div class="ri-meta">${found.set.toUpperCase()} ${found.numero} · <span id="ri-rareza-${i}">${found.variante}</span> · <span id="ri-idioma-${i}">${idiomaCard}</span></div>
       <div id="ri-aviso-idioma-${i}">${avisoIdioma}</div>
-      <div class="badge-wrap-${i}" style="margin-top:4px">${badgesHtml}</div>
       ${buildControles(grupo, i, disp, found, idiomaCard, estado === 'parcial')}
+      <div class="badge-wrap-${i}" style="margin-top:6px">${badgesHtml}</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
       <button class="ri-remove" onclick="eliminarItem(${i})" title="Quitar carta">✕</button>
