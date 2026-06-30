@@ -409,7 +409,7 @@
             <div class="row2" style="margin-top:14px">
               <div class="field">
                 <label>Día preferido <span class="req">*</span></label>
-                <select id="retiroDia">
+                <select id="retiroDia" onchange="actualizarHorasRetiroMETA()">
                   <option value="">Elige un día</option>
                   <option>Lunes</option><option>Martes</option><option>Miércoles</option>
                   <option>Jueves</option><option>Viernes</option><option>Sábado</option>
@@ -419,16 +419,7 @@
               <div class="field">
                 <label>Hora preferida <span class="req">*</span></label>
                 <select id="retiroHora">
-                  <option value="">Elige una hora</option>
-                  <option>10:00</option><option>10:30</option>
-                  <option>11:00</option><option>11:30</option>
-                  <option>12:00</option><option>12:30</option>
-                  <option>13:00</option><option>13:30</option>
-                  <option>14:00</option><option>14:30</option>
-                  <option>15:00</option><option>15:30</option>
-                  <option>16:00</option><option>16:30</option>
-                  <option>17:00</option><option>17:30</option>
-                  <option>18:00</option><option>18:30</option>
+                  <option value="">Elige primero el día</option>
                 </select>
                 <div class="field-error" id="err-retiroHora">Elige una hora.</div>
               </div>
@@ -2194,16 +2185,14 @@ async function submitPedido() {
   };
 
   try {
-    const url = SCRIPT_URL + '?carpeta=TCG&data=' + encodeURIComponent(JSON.stringify(orderData));
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.success === false) {
-      alert('⚠️ ' + (data.error || 'Error al enviar el pedido. Intenta de nuevo.'));
-      btn.disabled = false; btn.textContent = 'Enviar pedido →'; return;
-    }
+    await fetch(SCRIPT_URL, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(orderData)
+    });
     document.getElementById('formSection').style.display = 'none';
     document.getElementById('successScreen').classList.add('show');
-    document.getElementById('successOrder').textContent = data.id || 'TCG-0001';
+    document.getElementById('successOrder').textContent = 'META-0001';
   } catch(e) {
     alert('Error de conexión. Intenta de nuevo.');
     btn.disabled = false; btn.textContent = 'Enviar pedido →';
@@ -2231,6 +2220,17 @@ async function submitPedido() {
   }
   frame();
 })();
+
+function actualizarHorasRetiroMETA(){
+  var dia=document.getElementById('retiroDia').value;
+  var sel=document.getElementById('retiroHora');
+  if(!sel) return;
+  var max=(dia==='Sábado')?'14:00':'18:30';
+  var todas=['10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30'];
+  var html='<option value="">Elige una hora</option>';
+  todas.forEach(function(h){ if(h<=max) html+='<option>'+h+'</option>'; });
+  sel.innerHTML=html;
+}
 </script>
 </body>
 </html>
