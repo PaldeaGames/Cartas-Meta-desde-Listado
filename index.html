@@ -468,7 +468,7 @@ header p{font-size:.75rem;color:var(--txm);margin-top:1px}
 </div>
 <script>
 /* ===================== CONFIG ===================== */
-var VERSION='2';
+var VERSION='3';
 console.log('%cPaldea Games — Carpeta Meta Game — Versión '+VERSION,'background:#7c3aed;color:#fff;padding:4px 10px;border-radius:4px;font-size:14px');
 var GAS_URL='https://script.google.com/macros/s/AKfycbymkq81nv85-kf3QIbjnkPfYyQwN6PZIn9r8GsJ7iVMYbgL5CtvLCADHc9c5CCXtMCl/exec';
 var IMG_BASE='https://raw.githubusercontent.com/PaldeaGames/Cartas-Meta-desde-Listado/main/Imagenes/';
@@ -529,10 +529,36 @@ function camelPK(s){
 function numPK(x){return String(x||'').trim().split('/')[0].replace(/[^0-9A-Za-z]/g,'');}
 function rarPK(r){return String(r||'').replace(/\//g,'-').replace(/\s+/g,'');}
 
-// Replica exacta de nombreArchivoImgPK_ del Apps Script
+/* ===== MAPAS planilla -> archivo de imagen (mismo repo, carpeta Imagenes/) =====
+   La planilla usa nombres largos; los archivos reales usan codigos cortos.
+   Ejemplo real: set "MEG" -> "me1", rareza "Normal" -> "NRML" (archivo me1-54_NRML.jpg).
+   Agregar aqui cualquier set o rareza nueva que no calce. */
+var SET_IMG_MAP={'MEG':'me1'};
+var RAREZA_IMG_MAP={
+  'NORMAL':'NRML','NRML':'NRML',
+  'HOLO':'HOLO','HOLOGRÁFICA':'HOLO','HOLOGRAFICA':'HOLO',
+  'REVERSE HOLO':'REV-H','REVERSEHOLO':'REV-H','REV-H':'REV-H',
+  'POKE BALL':'POKEBALL','POKEBALL':'POKEBALL'
+};
+function setImgPK(s){
+  var k=String(s||'').trim().toUpperCase();
+  return SET_IMG_MAP[k]||String(s||'').trim().toLowerCase().replace(/\s+/g,'');
+}
+function rarImgPK(r){
+  var k=String(r||'').trim().toUpperCase();
+  return RAREZA_IMG_MAP[k]||rarPK(r);
+}
+
+// Replica exacta de nombreArchivoImgTCG_ del Apps Script
 function nombreArchivoImg(codInt,multi,rareza){
-  var b=String(codInt||'unknown').trim().replace(/[^a-zA-Z0-9\-]/g,'_');
-  if(multi) b+='_'+rarPK(rareza);
+  var raw=String(codInt||'').trim();
+  var parts=raw.split('-');
+  if(parts.length>1){
+    parts[0]=setImgPK(parts[0]);
+    raw=parts.join('-');
+  }
+  var b=(raw||'unknown').replace(/[^a-zA-Z0-9\-]/g,'_');
+  if(multi) b+='_'+rarImgPK(rareza);
   return b+'.jpg';
 }
 
