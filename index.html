@@ -601,6 +601,13 @@ function imgCandidatos(r,rarezasHermanas){
     c.push(IMG_BASE+nombreArchivoImg(ci,true,rareza));
     c.push(IMG_BASE+nombreArchivoImg(ci,true,'NRML'));
   });
+  /* Plan B: si la rareza de la planilla no calza con el sufijo real del
+     archivo (ej. dice "Ace Spec" pero el archivo es _SIR), se prueban
+     todos los sufijos conocidos para ese mismo numero. */
+  var TODOS_SUF=['SIR','DR','UR','EX','ACE','HOLO','REV-H','PKBL','NRML'];
+  TODOS_SUF.forEach(function(suf){
+    c.push(IMG_BASE+nombreArchivoImg(codInt,true,suf));
+  });
   var out=[];
   c.forEach(function(u){
     if(out.indexOf(u)<0)out.push(u);
@@ -1426,6 +1433,15 @@ function cotizarListaPK(){
     var res=buscarItemPK(item);
     if(!res){ COTIZ_NOPE.push(item); return; }
 
+    // Filtro de coherencia: si la linea trae un nombre (ej. "Abra"), las
+    // alternativas se limitan a cartas cuyo NOMBRE lo contiene. Sin esto,
+    // tokens de set como "Mega Evolution" calzaban con TODAS las cartas
+    // del set y la grilla mostraba el inventario completo.
+    if(item.textuales.length){
+      var nomTok=item.textuales[0];
+      var porNombre=res.matches.filter(function(c){return normPK(c[1]).indexOf(nomTok)>=0;});
+      if(porNombre.length) res={fase:res.fase, matches:porNombre};
+    }
     // agrupar los matches por carta fisica, respetando el orden de aparicion
     var vistas=[], grupos=[];
     res.matches.forEach(function(c){
