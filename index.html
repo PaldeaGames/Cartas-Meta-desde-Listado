@@ -488,7 +488,7 @@ var CARD_IDIOMA={};
 var CARRITO=[];
 var SACADAS=[];
 var VM='grid';
-var VF='', QF='', SF='', DISPF='', ORDF='', LF='';
+var VF='', QF='', SF='', DISPF='con', ORDF='', LF='';
 var TF='';
 var PAGE=1, PER_PAGE=50, VER_TODAS=false;
 var LISTADO_IDS=null, LISTADO_RESUMEN=null;
@@ -823,8 +823,8 @@ function build(){
     +buildTiposOptions()
     +'</select>'
     +'<select class="il-select" onchange="setDISPF(this.value)">'
-    +'<option value="">Disponibilidad</option>'
-    +'<option value="con">Con stock</option>'
+    +'<option value="con" selected>Con stock</option>'
+    +'<option value="">Todas</option>'
     +'<option value="sin">Sin stock</option>'
     +'</select>'
     +'<select class="il-select" onchange="setORDF(this.value)">'
@@ -917,7 +917,7 @@ function setV(mode,btn){
   renderAll();
 }
 function limpiarFiltros(){
-  VF='';SF='';DISPF='';ORDF='';QF='';LF='';TF='';
+  VF='';SF='';DISPF='con';ORDF='';QF='';LF='';TF='';
   PAGE=1;VER_TODAS=false;
   var inp=document.getElementById('search-input');
   if(inp) inp.value='';
