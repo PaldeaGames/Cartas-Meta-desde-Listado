@@ -499,15 +499,18 @@ function clp(n){return '$ '+Math.round(n).toLocaleString('es-CL');}
 /* Parser robusto formato chileno: "12.000"->12000, "1.170"->1170, "1.990,5"->1990.5, numero pasa igual */
 function clpNum(v){
   if(typeof v==='number') return isFinite(v)?v:0;
-  var s=String(v==null?'':v).trim();
+  var s=String(v==null?'':v).trim().replace(/[$\s]/g,'');
   if(!s) return 0;
-  if(s.indexOf(',')>=0){
-    var parts=s.split(',');
-    var dec=parts.pop();
-    s=parts.join('').replace(/\./g,'')+'.'+dec;
-  } else {
-    var m=s.match(/^(\d{1,3})(\.\d{3})+$/);
-    if(m) s=s.replace(/\./g,'');
+  var hasDot=s.indexOf('.')>=0, hasCom=s.indexOf(',')>=0;
+  if(hasDot&&hasCom){
+    /* el separador que aparece al final es el decimal */
+    if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
+    else s=s.replace(/,/g,'');
+  } else if(hasCom){
+    if(/^\d{1,3}(,\d{3})+$/.test(s)) s=s.replace(/,/g,''); /* "12,000" -> 12000 */
+    else s=s.replace(',','.');
+  } else if(hasDot){
+    if(/^\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,''); /* "12.000" -> 12000 */
   }
   var n=parseFloat(s);
   return isFinite(n)?n:0;
@@ -533,12 +536,20 @@ function rarPK(r){return String(r||'').replace(/\//g,'-').replace(/\s+/g,'');}
    La planilla usa nombres largos; los archivos reales usan codigos cortos.
    Ejemplo real: set "MEG" -> "me1", rareza "Normal" -> "NRML" (archivo me1-54_NRML.jpg).
    Agregar aqui cualquier set o rareza nueva que no calce. */
-var SET_IMG_MAP={'MEG':'me1'};
+var SET_IMG_MAP={'MEG':'me1','ME1':'me1','ME2':'me2','ME2PT5':'me2pt5','ME2.5':'me2pt5',
+  'SV5':'sv5','SV6':'sv6','SV6PT5':'sv6pt5','SV6.5':'sv6pt5','SV7':'sv7','SV8':'sv8',
+  'SV8PT5':'sv8pt5','SV8.5':'sv8pt5','SV9':'sv9','SV10':'sv10','SV10PT5':'sv10pt5','SV10.5':'sv10pt5',
+  'SVP':'svp','BW4':'bw4',
+  'SFA':'sv6pt5','PRE':'sv8pt5','SCR':'sv7','SSP':'sv8','TWM':'sv6','TEF':'sv5',
+  'JTG':'sv9','DRI':'sv10','BLK':'rsv10pt5','WHT':'zsv10pt5'};
+var SET_IMG_ALT={'BLK':['zsv10pt5'],'WHT':['rsv10pt5'],'SV10PT5':['rsv10pt5','zsv10pt5'],'SV10.5':['rsv10pt5','zsv10pt5']};
 var RAREZA_IMG_MAP={
   'NORMAL':'NRML','NRML':'NRML',
   'HOLO':'HOLO','HOLOGRÁFICA':'HOLO','HOLOGRAFICA':'HOLO',
-  'REVERSE HOLO':'REV-H','REVERSEHOLO':'REV-H','REV-H':'REV-H',
-  'POKE BALL':'POKEBALL','POKEBALL':'POKEBALL'
+  'REVERSE HOLO':'REV-H','REVERSEHOLO':'REV-H','REV-H':'REV-H','REVERSE':'REV-H',
+  'POKE BALL':'PKBL','POKEBALL':'PKBL','PKBL':'PKBL',
+  'EX':'EX','UR':'UR','SIR':'SIR','DR':'DR','DOUBLE RARE':'DR',
+  'ACE SPEC':'ACE','ACE':'ACE'
 };
 function setImgPK(s){
   var k=String(s||'').trim().toUpperCase();
@@ -582,6 +593,12 @@ function imgCandidatos(r,rarezasHermanas){
   c.push(IMG_BASE+nombreArchivoImg(codInt,true,'NRML'));
   (rarezasHermanas||[]).forEach(function(rn){
     c.push(IMG_BASE+nombreArchivoImg(codInt,true,rn));
+  });
+  var _pa=String(codInt||'').split('-');
+  (SET_IMG_ALT[String(_pa[0]).toUpperCase()]||[]).forEach(function(ap){
+    var ci=ap+'-'+_pa.slice(1).join('-');
+    c.push(IMG_BASE+nombreArchivoImg(ci,true,rareza));
+    c.push(IMG_BASE+nombreArchivoImg(ci,true,'NRML'));
   });
   var out=[];
   c.forEach(function(u){if(out.indexOf(u)<0)out.push(u);});
@@ -1000,7 +1017,7 @@ function buildCardHtml(r){
   var idioma=idiomaActivo(r);
   var url=imgUrlFor(r);
   var imgHtml=url
-    ?'<img src="'+url+'" alt="'+escHtml(r[1])+'" title="'+escHtml(r[1])+' \u00B7 '+TIP_TITLE+'" data-idx="0" style="width:100%;height:auto;display:block" onerror="imgFallback(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">'
+    ?'<img src="'+url+'" alt="'+escHtml(r[1])+'" title="'+escHtml(r[1])+' \u00B7 '+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" style="width:100%;height:auto;display:block" onerror="imgFallback(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">'
     :'<div class="ph">Sin imagen</div>';
 
   var disp=idiomasDisponibles(r);
@@ -1083,7 +1100,7 @@ function renderTable(rows,cont){
 function buildRowHtml(r){
   var idioma=idiomaActivo(r);
   var url=imgUrlFor(r);
-  var imgHtml=url?'<img src="'+url+'" alt="'+escHtml(r[1])+'" title="'+escHtml(r[1])+' \u00B7 '+TIP_TITLE+'" data-idx="0" style="width:44px;border-radius:4px" onerror="imgFallback(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'\u2014';
+  var imgHtml=url?'<img src="'+url+'" alt="'+escHtml(r[1])+'" title="'+escHtml(r[1])+' \u00B7 '+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" style="width:44px;border-radius:4px" onerror="imgFallback(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'\u2014';
 
   var langCell='\u2014',precioCell='\u2014',stkCell='\u2014',cartCell='';
   if(GAS_LOADED){
@@ -1670,7 +1687,7 @@ function renderCotizacion(){
           }).join('')+'</select>';
       }
       h+='<div class="ag-row">'
-        +(uA?'<img class="ag-img" src="'+uA+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+        +(uA?'<img class="ag-img" src="'+uA+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
         +'<div class="ag-info"><span class="ag-nom">'+escHtml(r[1])+'</span>'
         +'<span class="ag-meta">'+r[6]+' N\u00B0 '+r[3]+' \u00B7 '+nombreRareza(r[4])+'</span>'
         +(ctrlsAg?'<span class="ag-ctrls">'+ctrlsAg+'</span>':'')
@@ -1703,7 +1720,7 @@ function renderCotizacion(){
       var r=o.e.found;
       var uS=imgUrlFor(r);
       h+='<div class="ag-row">'
-        +(uS?'<img class="ag-img" src="'+uS+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+        +(uS?'<img class="ag-img" src="'+uS+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
         +'<div class="ag-info"><span class="ag-nom">'+escHtml(r[1])+'</span>'
         +'<span class="ag-meta">'+r[6]+' N\u00B0 '+r[3]+' \u00B7 '+nombreRareza(r[4])+' \u00B7 '+o.e.devuelta.idioma+'</span></div>'
         +'<button class="btn-volver-agregar" onclick="reagregarDevueltaPK('+o.idx+')">Volver a agregar (x'+o.e.devuelta.qty+')</button>'
@@ -1714,7 +1731,7 @@ function renderCotizacion(){
       var r=o.e.found;
       var uQ=imgUrlFor(r);
       h+='<div class="ag-row">'
-        +(uQ?'<img class="ag-img" src="'+uQ+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+        +(uQ?'<img class="ag-img" src="'+uQ+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
         +'<div class="ag-info"><span class="ag-nom">'+escHtml(r[1])+'</span>'
         +'<span class="ag-meta">'+r[6]+' N\u00B0 '+r[3]+' \u00B7 '+nombreRareza(r[4])+' \u00B7 '+o.e.idioma+'</span></div>'
         +'<button class="btn-volver-agregar" onclick="reagregarQuitadaPK('+o.idx+')">Volver a agregar (x'+o.e.item.qty+')</button>'
@@ -1926,7 +1943,7 @@ function buildRiPK(e,idx){
       // Miniatura sola, sin texto: el set y numero quedan en el tooltip
       // (title) y en el selector desplegable de arriba.
       thumbs+='<div class="alt-thumb'+(esSel?' sel':'')+'" onclick="cambiarCartaCotiz('+idx+','+rep[0]+')" title="'+escHtml(rep[6])+' '+escHtml(rep[3])+' \u00B7 '+TIP_TITLE+'">'
-        +(u?'<img src="'+u+'" alt="'+escHtml(rep[1])+'" data-idx="0" onerror="imgFallbackCart(this,'+cardImg[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'<div class="alt-ph">Sin imagen</div>')
+        +(u?'<img src="'+u+'" alt="'+escHtml(rep[1])+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+cardImg[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'<div class="alt-ph">Sin imagen</div>')
         +'</div>';
     });
     thumbs+='</div>';
@@ -1951,7 +1968,7 @@ function buildRiPK(e,idx){
   }
 
   return '<div class="ri'+(e.off?' ri-off':'')+'">'
-    +(url?'<img class="ri-img" src="'+url+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+    +(url?'<img class="ri-img" src="'+url+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
     +'<div class="ri-body">'
       +'<div class="ri-name">'+escHtml(r[1])+'</div>'
       +'<div class="ri-meta">'+r[6]+' \u00B7 N\u00B0 '+r[3]+' \u00B7 '+nombreRareza(r[4])+' \u00B7 pediste x'+e.item.qty+'</div>'
@@ -2104,7 +2121,7 @@ function buildRiAgregadaPK(e,idx){
     +'</div>';
 
   return '<div class="ri ri-agregada">'
-    +(url?'<img class="ri-img" src="'+url+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+    +(url?'<img class="ri-img" src="'+url+'" alt="'+escHtml(r[1])+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+r[0]+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
     +'<div class="ri-body">'
       +'<div class="ri-name">'+escHtml(r[1])+'</div>'
       +'<div class="ri-meta">'+r[6]+' \u00B7 N\u00B0 '+r[3]+' \u00B7 '+nombreRareza(r[4])+' \u00B7 pediste x'+e.item.qty+'</div>'
@@ -2446,7 +2463,7 @@ function renderVistaCarrito(){
     var stkC=cr?getStock(cr,c.idioma):c.qty;
     var topeC=(c.qty>=stkC);
     h+='<div class="cart-item">';
-    if(c.img) h+='<img src="'+c.img+'" alt="'+escHtml(c.nombre)+'" title="'+TIP_TITLE+'" data-idx="0" onerror="imgFallbackCart(this,'+c.cardId+',parseInt(this.getAttribute(\'data-idx\'),10))">';
+    if(c.img) h+='<img src="'+c.img+'" alt="'+escHtml(c.nombre)+'" title="'+TIP_TITLE+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+c.cardId+',parseInt(this.getAttribute(\'data-idx\'),10))">';
     h+='<div class="cart-item-info">'
       +'<div class="cart-item-name">'+escHtml(c.nombre)+'</div>'
       +'<div class="cart-item-meta">'+escHtml(nombreRareza(c.rareza))+' - '+c.idioma+' - '+escHtml(c.setNombre||c.set||'\u2014')+' '+escHtml(c.num||'')+'</div>'
@@ -2848,7 +2865,7 @@ function htmlSacadas(){
       ?'<button class="btn-volver-agregar" onclick="reagregarSacada('+i+')">Volver a agregar (x'+qtyBtn+')</button>'
       :'<button class="btn-volver-agregar" disabled style="opacity:.45;cursor:not-allowed;filter:grayscale(.6)" title="Sin stock por ahora">Sin stock por ahora</button>';
     h+='<div class="ag-row">'
-      +(s.img?'<img class="ag-img" src="'+s.img+'" alt="'+escHtml(s.nombre)+'" data-idx="0" onerror="imgFallbackCart(this,'+s.cardId+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
+      +(s.img?'<img class="ag-img" src="'+s.img+'" alt="'+escHtml(s.nombre)+'" loading="lazy" decoding="async" data-idx="0" onerror="imgFallbackCart(this,'+s.cardId+',parseInt(this.getAttribute(\'data-idx\'),10))">':'')
       +'<div class="ag-info"><span class="ag-nom">'+escHtml(s.nombre)+'</span>'
       +'<span class="ag-meta">'+escHtml(s.setNombre||s.set||'\u2014')+(s.num?' N\u00B0 '+s.num:'')+' \u00B7 '+escHtml(nombreRareza(s.rareza))+' \u00B7 '+s.idioma+'</span></div>'
       +btnVuelve
