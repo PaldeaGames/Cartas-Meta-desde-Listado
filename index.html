@@ -468,6 +468,8 @@ header p{font-size:.75rem;color:var(--txm);margin-top:1px}
 </div>
 <script>
 /* ===================== CONFIG ===================== */
+var VERSION='2';
+console.log('%cPaldea Games — Carpeta Meta Game — Versión '+VERSION,'background:#7c3aed;color:#fff;padding:4px 10px;border-radius:4px;font-size:14px');
 var GAS_URL='https://script.google.com/macros/s/AKfycbymkq81nv85-kf3QIbjnkPfYyQwN6PZIn9r8GsJ7iVMYbgL5CtvLCADHc9c5CCXtMCl/exec';
 var IMG_BASE='https://raw.githubusercontent.com/PaldeaGames/Cartas-Meta-desde-Listado/main/Imagenes/';
 var CARPETA='TCG';
@@ -494,6 +496,22 @@ var GAS_LOADED=false;
 
 /* ===================== HELPERS ===================== */
 function clp(n){return '$ '+Math.round(n).toLocaleString('es-CL');}
+/* Parser robusto formato chileno: "12.000"->12000, "1.170"->1170, "1.990,5"->1990.5, numero pasa igual */
+function clpNum(v){
+  if(typeof v==='number') return isFinite(v)?v:0;
+  var s=String(v==null?'':v).trim();
+  if(!s) return 0;
+  if(s.indexOf(',')>=0){
+    var parts=s.split(',');
+    var dec=parts.pop();
+    s=parts.join('').replace(/\./g,'')+'.'+dec;
+  } else {
+    var m=s.match(/^(\d{1,3})(\.\d{3})+$/);
+    if(m) s=s.replace(/\./g,'');
+  }
+  var n=parseFloat(s);
+  return isFinite(n)?n:0;
+}
 function skey(uid,idioma){return uid+'|'+String(idioma).toUpperCase();}
 /* Tipo de carta: unica fuente = columna "categoria" de la planilla (ej: "Pokemon Planta") */
 var TIPO_DESDE_CAT={'planta':'Planta','fuego':'Fuego','agua':'Agua','electrico':'El\u00e9ctrico','psiquico':'Ps\u00edquico','lucha':'Lucha','oscuridad':'Oscuridad','metal':'Metal','dragon':'Drag\u00f3n','incoloro':'Incoloro','hada':'Hada'};
@@ -673,7 +691,7 @@ async function syncGAS(){
       IDIOMAS.forEach(function(idm){
         var lo=idm.toLowerCase();
         var s=parseInt(it['stk_'+lo],10)||0;
-        var p=Number(it['prc_'+lo])||0;
+        var p=clpNum(it['prc_'+lo]);
         STOCK[skey(uid,idm)]=s;
         PRICES[skey(uid,idm)]=p;
       });
