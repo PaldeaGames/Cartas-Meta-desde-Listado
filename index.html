@@ -541,7 +541,8 @@ var SET_IMG_MAP={'MEG':'me1','ME1':'me1','ME2':'me2','ME2PT5':'me2pt5','ME2.5':'
   'SV8PT5':'sv8pt5','SV8.5':'sv8pt5','SV9':'sv9','SV10':'sv10','SV10PT5':'sv10pt5','SV10.5':'sv10pt5',
   'SVP':'svp','BW4':'bw4',
   'SFA':'sv6pt5','PRE':'sv8pt5','SCR':'sv7','SSP':'sv8','TWM':'sv6','TEF':'sv5',
-  'JTG':'sv9','DRI':'sv10','BLK':'rsv10pt5','WHT':'zsv10pt5'};
+  'JTG':'sv9','DRI':'sv10','BLK':'rsv10pt5','WHT':'zsv10pt5',
+  'PFL':'me2','ASC':'me2pt5','ME2':'me2','ME2PT5':'me2pt5','ME2.5':'me2pt5'};
 var SET_IMG_ALT={'BLK':['zsv10pt5'],'WHT':['rsv10pt5'],'SV10PT5':['rsv10pt5','zsv10pt5'],'SV10.5':['rsv10pt5','zsv10pt5']};
 var RAREZA_IMG_MAP={
   'NORMAL':'NRML','NRML':'NRML',
@@ -601,7 +602,11 @@ function imgCandidatos(r,rarezasHermanas){
     c.push(IMG_BASE+nombreArchivoImg(ci,true,'NRML'));
   });
   var out=[];
-  c.forEach(function(u){if(out.indexOf(u)<0)out.push(u);});
+  c.forEach(function(u){
+    if(out.indexOf(u)<0)out.push(u);
+    var p=u.replace(/\.jpg$/,'.png'); /* el repo mezcla .jpg y .png */
+    if(p!==u&&out.indexOf(p)<0)out.push(p);
+  });
   return out;
 }
 function imgUrlFor(r){
