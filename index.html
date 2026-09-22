@@ -1338,10 +1338,16 @@ function matchTokens(c, toks){
 
 // Agrupa variantes: todas las CARDS que son la misma carta fisica
 // (mismo nombre + codSet + numero) pero distinta rareza.
+function gkeyC(c){
+  // clave de carta fisica: nombre + set + numero CORTO (sin "/142").
+  // La planilla a veces trae la misma carta con "57/142" y "57", o el
+  // codigo de set con otra grafia: sin normalizar se duplicaba el grupo.
+  var num=String(c[3]||'').split('/')[0];
+  return normPK(c[1])+'|'+normPK(c[6]||c[2])+'|'+num;
+}
 function grupoDeCarta(c){
-  return CARDS.filter(function(x){
-    return normPK(x[1])===normPK(c[1]) && normPK(x[2])===normPK(c[2]) && normPK(x[3])===normPK(c[3]);
-  });
+  var k=gkeyC(c);
+  return CARDS.filter(function(x){ return gkeyC(x)===k; });
 }
 
 function buscarItemPK(item){
@@ -1445,7 +1451,7 @@ function cotizarListaPK(){
     // agrupar los matches por carta fisica, respetando el orden de aparicion
     var vistas=[], grupos=[];
     res.matches.forEach(function(c){
-      var k=normPK(c[1])+'|'+normPK(c[2])+'|'+normPK(c[3]);
+      var k=gkeyC(c);
       if(vistas.indexOf(k)<0){ vistas.push(k); grupos.push(grupoDeCarta(c)); }
     });
 
@@ -1488,11 +1494,11 @@ function cotizarListaPK(){
     f.item.qty+=e.item.qty;
     f.fusionadas=(f.fusionadas||1)+1;
     e.alternativas.forEach(function(g){
-      var k=normPK(g[0][1])+'|'+normPK(g[0][2])+'|'+normPK(g[0][3]);
+      var k=gkeyC(g[0]);
       var existe=false;
       for(var j=0;j<f.alternativas.length;j++){
         var g2=f.alternativas[j];
-        if(normPK(g2[0][1])+'|'+normPK(g2[0][2])+'|'+normPK(g2[0][3])===k){ existe=true; break; }
+        if(gkeyC(g2[0])===k){ existe=true; break; }
       }
       if(!existe) f.alternativas.push(g);
     });
@@ -1703,7 +1709,7 @@ function renderCotizacion(){
         ctrlsAg+='<select class="ri-sel" onchange="cambiarCartaCotiz('+o.idx+',this.value)">'
           +o.e.alternativas.map(function(g){
             var c=elegirVariante(g);
-            var sel=(normPK(c[1])===normPK(r[1])&&normPK(c[2])===normPK(r[2])&&normPK(c[3])===normPK(r[3]))?' selected':'';
+            var sel=(gkeyC(c)===gkeyC(r))?' selected':'';
             return '<option value="'+c[0]+'"'+sel+'>'+c[6]+' N\u00B0 '+c[3]+'</option>';
           }).join('')+'</select>';
       }
@@ -1841,7 +1847,7 @@ function irAlCarritoDesdeLista(){
 function persistirEstado(){
   try{
     var ta=document.getElementById('paste-textarea');
-    localStorage.setItem('paldea_estado', JSON.stringify({
+    localStorage.setItem('paldea_estado_v2', JSON.stringify({
       carrito:CARRITO.map(function(c){return {cardId:c.cardId,idioma:c.idioma,qty:c.qty,nombre:c.nombre};}),
       sacadas:SACADAS.map(function(c){return {cardId:c.cardId,idioma:c.idioma,qty:c.qty,nombre:c.nombre};}),
       lista:ta?ta.value:'',
@@ -1853,7 +1859,7 @@ function persistirEstado(){
 }
 function restaurarEstado(){
   var raw;
-  try{ raw=localStorage.getItem('paldea_estado'); }catch(e){ return; }
+  try{ raw=localStorage.getItem('paldea_estado_v2'); }catch(e){ return; }
   if(!raw) return;
   var s; try{ s=JSON.parse(raw); }catch(e){ return; }
 
@@ -1945,7 +1951,7 @@ function buildRiPK(e,idx){
     selAlt='<select class="ri-sel" onchange="cambiarCartaCotiz('+idx+',this.value)">'
       +e.alternativas.map(function(g){
         var c=elegirVariante(g);
-        var sel=(normPK(c[1])===normPK(r[1])&&normPK(c[2])===normPK(r[2])&&normPK(c[3])===normPK(r[3]))?' selected':'';
+        var sel=(gkeyC(c)===gkeyC(r))?' selected':'';
         return '<option value="'+c[0]+'"'+sel+'>'+c[6]+' N\u00B0 '+c[3]+'</option>';
       }).join('')+'</select>';
   }
@@ -1958,7 +1964,7 @@ function buildRiPK(e,idx){
     thumbs='<div class="alt-label">Elige la carta que quieres comprar: <span class="alt-tip">('+TIP_ZOOM+')</span></div><div class="alt-thumbs">';
     e.alternativas.forEach(function(g){
       var rep=elegirVariante(g);
-      var esSel=(normPK(rep[1])===normPK(r[1])&&normPK(rep[2])===normPK(r[2])&&normPK(rep[3])===normPK(r[3]));
+      var esSel=(gkeyC(rep)===gkeyC(r));
       var cardImg=esSel?r:rep;
       var u=imgUrlFor(cardImg);
       // Miniatura sola, sin texto: el set y numero quedan en el tooltip
@@ -2123,7 +2129,7 @@ function buildRiAgregadaPK(e,idx){
     selAlt='<select class="ri-sel" onchange="cambiarCartaAgregadaPK('+idx+',this.value)">'
       +e.alternativas.map(function(g){
         var c=elegirVariante(g);
-        var sel=(normPK(c[1])===normPK(r[1])&&normPK(c[2])===normPK(r[2])&&normPK(c[3])===normPK(r[3]))?' selected':'';
+        var sel=(gkeyC(c)===gkeyC(r))?' selected':'';
         var sinStkC=idiomasDisponibles(c).length===0;
         return '<option value="'+c[0]+'"'+sel+(sinStkC?' disabled':'')+'>'+c[6]+' N\u00B0 '+c[3]+(sinStkC?' (sin stock)':'')+'</option>';
       }).join('')+'</select>';
