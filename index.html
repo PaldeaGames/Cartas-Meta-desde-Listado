@@ -1330,6 +1330,12 @@ function buscablePK(c){
   var numCorto=String(c[3]||'').split('/')[0];
   return normPK(c[1]+' '+c[2]+' '+c[6]+' '+c[3]+' '+numCorto+' '+c[5]+' '+c[4]);
 }
+function nombreCalza(nombreCarta,tok){
+  // el token debe ser PREFIJO de una palabra del nombre: "poke" calza
+  // con "Poke Pad" pero NO con "Slowpoke" (aunque lo contiene dentro).
+  if(!tok||tok.length<3) return false;
+  return normPK(nombreCarta).split(/\s+/).some(function(w){return w.indexOf(tok)===0;});
+}
 function matchTokens(c, toks){
   if(!toks.length) return false;
   var b=buscablePK(c);
@@ -1391,7 +1397,7 @@ function buscarItemPK(item){
   }
   // Fase 3: solo el primer token textual (normalmente el nombre)
   if(item.textuales.length>1){
-    var f3=CARDS.filter(function(c){return matchTokens(c,[item.textuales[0]]);});
+    var f3=CARDS.filter(function(c){return nombreCalza(c[1],item.textuales[0]);});
     if(f3.length) return {fase:3, matches:f3};
   }
   return null;
@@ -1445,7 +1451,7 @@ function cotizarListaPK(){
     // del set y la grilla mostraba el inventario completo.
     if(item.textuales.length){
       var nomTok=item.textuales[0];
-      var porNombre=res.matches.filter(function(c){return normPK(c[1]).indexOf(nomTok)>=0;});
+      var porNombre=res.matches.filter(function(c){return nombreCalza(c[1],nomTok)||normPK(c[1]).indexOf(nomTok)>=0;});
       if(porNombre.length) res={fase:res.fase, matches:porNombre};
     }
     // agrupar los matches por carta fisica, respetando el orden de aparicion
