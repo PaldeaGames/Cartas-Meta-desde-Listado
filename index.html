@@ -1258,7 +1258,7 @@ function cerrarPegarListado(){
    Busqueda en 3 fases, igual criterio que findGrupo de Metagame:
      Fase 1: todos los tokens calzan  -> match exacto
      Fase 2: se sueltan los numericos -> mismo nombre/set, otro numero
-     Fase 3: solo los tokens de texto -> aviso "Pediste -> Tenemos"
+     Fase 3: solo el nombre pedido (TODAS sus palabras) -> aviso "Pediste -> Tenemos"
    ============================================================ */
 
 var COTIZ=[];        // resultados activos
@@ -1333,8 +1333,50 @@ function buscablePK(c){
 function nombreCalza(nombreCarta,tok){
   // el token debe ser PREFIJO de una palabra del nombre: "poke" calza
   // con "Poke Pad" pero NO con "Slowpoke" (aunque lo contiene dentro).
-  if(!tok||tok.length<3) return false;
-  return normPK(nombreCarta).split(/\s+/).some(function(w){return w.indexOf(tok)===0;});
+  // Los tokens muy cortos ("ex", "N") deben ser la palabra completa.
+  if(!tok) return false;
+  var palabras=normPK(nombreCarta).split(/\s+/);
+  if(tok.length<3) return palabras.indexOf(tok)>=0;
+  return palabras.some(function(w){return w.indexOf(tok)===0;});
+}
+// TODAS las palabras del nombre pedido deben calzar, no solo la primera.
+function nombreCalzaTodos(nombreCarta,toks){
+  return toks.every(function(t){return nombreCalza(nombreCarta,t);});
+}
+
+/* Diccionarios del inventario: palabras que son datos de SET (codigo,
+   nombre del set, codigo interno) y palabras/prefijos que son NOMBRES
+   de carta. Sirven para separar "Mega Kangaskhan ex MEG" en nombre
+   ("mega kangaskhan ex") + set ("meg"). Se reconstruyen solos si el
+   inventario se recarga (CARDS cambia de referencia). */
+var _DIC_CARDS=null, _SET_DIC=null, _NOM_DIC=null;
+function diccionariosPK(){
+  if(_DIC_CARDS===CARDS&&_SET_DIC) return;
+  _DIC_CARDS=CARDS; _SET_DIC={}; _NOM_DIC={};
+  CARDS.forEach(function(c){
+    (normPK(c[2])+' '+normPK(c[6])+' '+normPK(c[5])).split(/\s+/).forEach(function(t){ if(t) _SET_DIC[t]=1; });
+    normPK(c[1]).split(/\s+/).forEach(function(w){
+      if(!w) return;
+      _NOM_DIC[w]=1;
+      if(w.length>2) _NOM_DIC[w.slice(0,3)]=1;  // "por" cuenta como nombre si existe "Porygon"
+      if(w.length>3) _NOM_DIC[w.slice(0,4)]=1;
+    });
+  });
+}
+// Un token textual es dato de set si es un codigo/nombre de set conocido
+// o si es corto y no aparece en ningun nombre de carta ("asc", "por").
+function tokenEsDeSetPK(t){
+  diccionariosPK();
+  if(_SET_DIC[t]) return true;
+  return t.length<=4 && !_NOM_DIC[t];
+}
+// Nombre pedido: la corrida de tokens textuales soltando de la COLA los
+// datos de set (en las listas el set se escribe despues del nombre).
+// Nunca devuelve vacio: aunque todo parezca set, queda el primer token.
+function tokensDeNombrePK(textuales){
+  var t=textuales.slice();
+  while(t.length>1 && tokenEsDeSetPK(t[t.length-1])) t.pop();
+  return t;
 }
 function matchTokens(c, toks){
   if(!toks.length) return false;
@@ -1395,9 +1437,15 @@ function buscarItemPK(item){
     var f2=CARDS.filter(function(c){return matchTokens(c,item.textuales);});
     if(f2.length) return {fase:2, matches:f2};
   }
-  // Fase 3: solo el primer token textual (normalmente el nombre)
-  if(item.textuales.length>1){
-    var f3=CARDS.filter(function(c){return nombreCalza(c[1],item.textuales[0]);});
+  // Fase 3: solo el NOMBRE pedido, completo. Antes bastaba que calzara
+  // el PRIMER token textual: "Mega Kangaskhan ex MEG 104" (sin stock en
+  // la tienda) calzaba con cualquier "Mega ..." y se terminaba ofreciendo
+  // Mega Charizard ex, una carta que el cliente nunca pidio. Ahora deben
+  // calzar TODAS las palabras del nombre; si la tienda no tiene ese
+  // Pokemon, la linea va a "sin coincidencia" en vez de sugerir otra.
+  if(item.textuales.length){
+    var nomToks=tokensDeNombrePK(item.textuales);
+    var f3=CARDS.filter(function(c){return nombreCalzaTodos(c[1],nomToks);});
     if(f3.length) return {fase:3, matches:f3};
   }
   return null;
@@ -1450,8 +1498,11 @@ function cotizarListaPK(){
     // tokens de set como "Mega Evolution" calzaban con TODAS las cartas
     // del set y la grilla mostraba el inventario completo.
     if(item.textuales.length){
-      var nomTok=item.textuales[0];
-      var porNombre=res.matches.filter(function(c){return nombreCalza(c[1],nomTok)||normPK(c[1]).indexOf(nomTok)>=0;});
+      // Mismo criterio que la fase 3: las alternativas deben contener el
+      // NOMBRE completo pedido (sin los datos de set), no solo la primera
+      // palabra. Asi la grilla y el selector nunca muestran otro Pokemon.
+      var nomToksF=tokensDeNombrePK(item.textuales);
+      var porNombre=res.matches.filter(function(c){return nombreCalzaTodos(c[1],nomToksF);});
       if(porNombre.length) res={fase:res.fase, matches:porNombre};
     }
     // agrupar los matches por carta fisica, respetando el orden de aparicion
